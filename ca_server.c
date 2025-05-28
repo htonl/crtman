@@ -29,6 +29,19 @@ struct CADaemon
     X509      *ca_cert;
 };
 
+// cert is your X509* (returned from generate_self_signed_cert)
+// path is a C string, e.g. "./mycert.pem"
+int write_cert_pem(const char *path, X509 *cert) {
+    FILE *f = fopen(path, "w");
+    if (!f) {
+        perror("fopen");
+        return 0;
+    }
+    int ok = PEM_write_X509(f, cert);
+    fclose(f);
+    return ok;
+}
+
 static void build_db_path(const CAConfig *cfg, const char *filename, char *out, size_t outlen) {
     snprintf(out, outlen, "%s/%s", cfg->db_dir, filename);
 }
@@ -263,6 +276,13 @@ static CA_STATUS lazy_get_keypair(CADaemon *ca)
     if (ca->cfg->provision_key)
     {
         status = ca_generate_keypair(ca);
+        if (status == CA_OK)
+        {
+            if (!write_cert_pem("ca.cert.pem", ca->ca_cert))
+            {
+                DEBUG_LOG("Failed to write PEM");
+            }
+        }
     }
     else
     {
