@@ -56,6 +56,16 @@
         }                                      \
     } while (0)
 
+#define FREE_IF_NOT_NULL(p, f) \
+    do                     \
+    {                      \
+        if (p != NULL)     \
+        {                  \
+            f(p);          \
+            p = NULL;      \
+        }                  \
+    } while (0)
+
 /* Error definitions */
 #define STATUS_SUCCESS 0
 #define STATUS_BAD_PARAM -1000
