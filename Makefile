@@ -23,3 +23,10 @@ $(TARGET): $(OBJ)
 
 clean:
 	rm -f $(OBJ) $(TARGET)
+
+boringssl:
+	cd vendor/boringssl && \
+	mkdir build && cd build && \
+	cmake -GNinja .. && \
+	ninja
+

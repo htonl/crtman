@@ -15,8 +15,6 @@ int main(int argc, char **argv) {
     }
     int a;
 
-    EXIT_IF(1 == 1, a, 5, "Testing ExitIf macro");
-
 exit:
 
     // 1) Prepare configuration
