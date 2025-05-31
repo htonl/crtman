@@ -27,6 +27,7 @@ struct CADaemon
     const CAConfig  *cfg;
     SecKeyRef  ca_pk;
     X509      *ca_cert;
+    CADaemonState  state;
 };
 
 // cert is your X509* (returned from generate_self_signed_cert)
@@ -58,7 +59,6 @@ static CA_STATUS generate_self_signed_cert(CADaemon *ca, X509 **cert);
 static CA_STATUS ca_generate_keypair(CADaemon *ca)
 {
     CFErrorRef cf_err = NULL;
-    int key_size = 3072;
     CFNumberRef key_size_num = NULL;
     CFStringRef label = NULL;
     CA_STATUS status = CA_OK;
@@ -72,21 +72,20 @@ static CA_STATUS ca_generate_keypair(CADaemon *ca)
     REQUIRE_ACTION(ca != NULL, return CA_ERR_BAD_PARAM;);
 
     // Build the attr params
-    key_size_num = CFNumberCreate(NULL, kCFNumberIntType, &key_size);
+    key_size_num = CFNumberCreate(NULL, kCFNumberIntType, (int[]){3072});
     REQUIRE_ACTION(key_size_num != NULL, return CA_ERR_MEMORY;);
 
     label = CFStringCreateWithCString(NULL, ca->cfg->ca_label, kCFStringEncodingUTF8);
     EXIT_IF(label == NULL, status, CA_ERR_MEMORY, "Failed to CFStringCreateWithCString");
 
     // Private key attributes
-    priv_attrs = CFDictionaryCreateMutable(NULL, 0, NULL, NULL);
+    priv_attrs = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
     CFDictionaryAddValue(priv_attrs, kSecAttrIsPermanent, kCFBooleanTrue);
 
     // Public attributes
-    attributes = CFDictionaryCreateMutable(NULL, 0, NULL, NULL);
+    attributes = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
     CFDictionaryAddValue(attributes, kSecAttrKeyType, kSecAttrKeyTypeRSA);
     CFDictionaryAddValue(attributes, kSecAttrKeySizeInBits, key_size_num);
-    //CFDictionaryAddValue(attributes, kSecAttrTokenID, kSecAttrTokenIDSecureEnclave);
     CFDictionaryAddValue(attributes, kSecAttrIsPermanent, kCFBooleanTrue);
     CFDictionaryAddValue(attributes, kSecAttrLabel, label);
     CFDictionaryAddValue(attributes, kSecPrivateKeyAttrs, priv_attrs);
@@ -213,10 +212,7 @@ CA_STATUS generate_self_signed_cert(CADaemon *ca, X509 **cert)
     X509_ALGOR_set0(sig_alg, OBJ_nid2obj(NID_sha256WithRSAEncryption), V_ASN1_NULL, NULL);
 
     // 3) Inject into both TBSCertificate and outer signatureAlgorithm:
-    if (!X509_set1_signature_algo(crt, sig_alg)) {
-        DEBUG_LOG("Failure setting signature alg");
-        // TODO: handle error
-    }
+    EXIT_IF(!X509_set1_signature_algo(crt, sig_alg), status, CA_ERR_INTERNAL, "Failed to set signature algorithm in X509.");
 
     // Sign TBSCertificate
     tbs_len = i2d_re_X509_tbs(crt, &tbs_der);
@@ -276,6 +272,7 @@ static CA_STATUS lazy_get_keypair(CADaemon *ca)
     if (ca->cfg->provision_key)
     {
         status = ca_generate_keypair(ca);
+#if DEBUG
         if (status == CA_OK)
         {
             if (!write_cert_pem("ca.cert.pem", ca->ca_cert))
@@ -283,6 +280,7 @@ static CA_STATUS lazy_get_keypair(CADaemon *ca)
                 DEBUG_LOG("Failed to write PEM");
             }
         }
+#endif /* DEBUG */
     }
     else
     {
@@ -319,6 +317,8 @@ CA_STATUS ca_init(const CAConfig *cfg, CADaemon **out)
     CADaemon *ca = malloc(sizeof(struct CADaemon));
     REQUIRE_ACTION(ca != NULL, return CA_ERR_MEMORY;);
 
+    ca->state = STARTING;
+
     // Setup the config
     ca->cfg = cfg;
 
@@ -326,7 +326,23 @@ CA_STATUS ca_init(const CAConfig *cfg, CADaemon **out)
     REQUIRE_ACTION(status == CA_OK, return CA_ERR_INTERNAL;);
 
     *out = ca;
+    ca->state = RUNNING;
 
     return CA_OK;
 }
 
+void ca_shutdown(CADaemon **ca)
+{
+    CADaemon *local = *ca;
+
+    REQUIRE_ACTION(ca != NULL, return ;);
+    REQUIRE_ACTION(local!= NULL, return ;);
+
+    local->state = STOPPING;
+
+    FREE_IF_NOT_NULL(local->ca_cert, X509_free);
+
+    local->ca_pk = NULL;
+
+    FREE_IF_NOT_NULL(local, free);
+}

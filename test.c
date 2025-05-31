@@ -33,6 +33,7 @@ exit:
         fprintf(stderr, "ca_init failed: %d\n", st);
         return 2;
     }
+    ca_shutdown(&ca);
 
     printf("✅ Generated SEP key and CA certificate.\n");
 

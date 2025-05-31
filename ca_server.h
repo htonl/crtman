@@ -34,6 +34,16 @@ typedef enum
     CA_ERR_ALREADY_REVOKED = 310,
 } ca_status_t;
 
+/*
+ * @brief State for the daemon
+ */
+typedef enum
+{
+    STARTING = 1,
+    RUNNING = 1,
+    STOPPING = 1,
+} CADaemonState;
+
 #define CA_STATUS ca_status_t
 
 /*
@@ -49,7 +59,7 @@ CA_STATUS ca_init(const CAConfig *cfg, CADaemon **out);
  *
  * @param [in] ca CA object to shutdown and free
  */
-void ca_shutdown(CADaemon *ca);
+void ca_shutdown(CADaemon **ca);
 
 // Handlers for each command
 int  ca_get_ca_cert(CADaemon *ca, char **pem_out);
