@@ -324,3 +324,43 @@ void ca_shutdown(CADaemon **ca)
 
     FREE_IF_NOT_NULL(local, free);
 }
+
+CA_STATUS ca_get_ca_cert(CADaemon *ca, char **pem_out)
+{
+    BIO *bio = NULL;
+    BUF_MEM *bptr = NULL;
+    char *buf = NULL;
+    int res = 0;
+    CA_STATUS status = CA_OK;
+
+    REQUIRE_ACTION(ca != NULL, return CA_ERR_BAD_PARAM;);
+    REQUIRE_ACTION(pem_out != NULL, return CA_ERR_BAD_PARAM;);
+
+    bio = BIO_new(BIO_s_mem());
+    REQUIRE_ACTION(bio != NULL, return CA_ERR_MEMORY;);
+
+    res = PEM_write_bio_X509(bio, ca->ca_cert);
+    EXIT_IF(!res, status, CA_ERR_INTERNAL, "Failed to PEM_write_bio_X509");
+
+    BIO_get_mem_ptr(bio, &bptr);
+    EXIT_IF(bptr == NULL, status, CA_ERR_INTERNAL, "Failed to get bio pointer");
+    EXIT_IF(bptr->length  == 0, status, CA_ERR_INTERNAL, "Failed to get bio pointer");
+
+    buf = malloc(bptr->length + 1);
+    EXIT_IF(buf == NULL, status, CA_ERR_MEMORY, "Failed to allocate pem_out buffer");
+
+    memcpy(buf, bptr->data, bptr->length);
+    buf[bptr->length] = '\0';
+
+    *pem_out = buf;
+exit:
+
+    FREE_IF_NOT_NULL(bio, BIO_free);
+    if (status != CA_OK)
+    {
+        FREE_IF_NOT_NULL(buf, free);
+    }
+
+    return status;
+}
+

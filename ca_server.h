@@ -62,7 +62,7 @@ CA_STATUS ca_init(const CAConfig *cfg, CADaemon **out);
 void ca_shutdown(CADaemon **ca);
 
 // Handlers for each command
-int  ca_get_ca_cert(CADaemon *ca, char **pem_out);
+CA_STATUS ca_get_ca_cert(CADaemon *ca, char **pem_out);
 int  ca_issue_cert(CADaemon *ca,
                    const char *csr_pem,
                    unsigned    valid_days,

@@ -7,9 +7,15 @@ CC        := clang
 CFLAGS    := -Ishared -I$(BORINGSSL)/include -std=c11 -Wall -Wextra -DDEBUG
 LDFLAGS   := $(BORINGSSL)/build/libcrypto.a -framework Security -framework CoreFoundation
 
+# Main executable
 SRC       := ca_server.c main.c shared/utils.c
 OBJ       := $(SRC:.c=.o)
 TARGET    := ca_test
+
+# Unit test executable
+TEST_SRC  := ca_server.c unittests.c shared/utils.c
+TEST_OBJ  := $(TEST_SRC:.c=.o)
+TEST_TARGET := unittests
 
 .PHONY: all clean
 
@@ -18,11 +24,12 @@ all: $(TARGET)
 $(TARGET): $(OBJ)
 	$(CC) -o $@ $^ $(LDFLAGS)
 
+# Build rule for any .c → .o
 %.o: %.c
 	$(CC) $(CFLAGS) -g -c $< -o $@
 
 clean:
-	rm -f $(OBJ) $(TARGET)
+	rm -f $(OBJ) $(TARGET) $(TEST_OBJ) $(TEST_TARGET)
 
 boringssl:
 	cd vendor/boringssl && \
@@ -30,5 +37,12 @@ boringssl:
 	cmake -GNinja .. && \
 	ninja
 
-verifycert:
+unittest: $(TEST_TARGET)
+
+$(TEST_TARGET): $(TEST_OBJ)
+	$(CC) -o $@ $^ $(LDFLAGS)
+
+runtests:
+	./unittests db com.example.myCA 31536000
 	openssl verify -CAfile db/ca.cert.pem db/ca.cert.pem
+
