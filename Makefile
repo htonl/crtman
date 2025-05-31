@@ -7,7 +7,7 @@ CC        := clang
 CFLAGS    := -Ishared -I$(BORINGSSL)/include -std=c11 -Wall -Wextra -DDEBUG
 LDFLAGS   := $(BORINGSSL)/build/libcrypto.a -framework Security -framework CoreFoundation
 
-SRC       := ca_server.c test.c
+SRC       := ca_server.c main.c shared/utils.c
 OBJ       := $(SRC:.c=.o)
 TARGET    := ca_test
 
@@ -30,3 +30,5 @@ boringssl:
 	cmake -GNinja .. && \
 	ninja
 
+verifycert:
+	openssl verify -CAfile db/ca.cert.pem db/ca.cert.pem

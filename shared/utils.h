@@ -73,3 +73,18 @@
 #define STATUS_INTERNAL_ERR -1002
 
 typedef int status_t;
+
+/*
+ * @brief Build the path to the daemon preferences file used for configuration
+ *
+ * @param [in] bundleID bundle id of the daemon
+ */
+char *build_preferences_path(const char *bundleID);
+
+/*
+ * @brief Build the path to the daemon app support directory
+ *
+ * @param [in] bundleID bundle id of the daemon
+ */
+char *build_app_support_path(const char *bundleID);
+
