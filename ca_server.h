@@ -63,12 +63,13 @@ void ca_shutdown(CADaemon **ca);
 
 // Handlers for each command
 CA_STATUS ca_get_ca_cert(CADaemon *ca, char **pem_out);
-int  ca_issue_cert(CADaemon *ca,
+CA_STATUS ca_issue_cert(CADaemon *ca,
                    const char *csr_pem,
                    unsigned    valid_days,
                    const char *profile,
                    char      **cert_pem_out,
                    char      **serial_out);
+
 int  ca_revoke_cert(CADaemon *ca,
                     const char *serial,
                     int          reason_code);
@@ -80,9 +81,7 @@ X509     *ca_build_cert(CADaemon *ca, X509_REQ *req,
                         ASN1_INTEGER *serial,
                         unsigned       valid_seconds,
                         const char    *profile);
-ASN1_INTEGER *ca_next_serial(CADaemon *ca);
 
-int  ca_record_cert(CADaemon *ca, X509 *cert);
 int  ca_record_revocation(CADaemon *ca, const char *serial, int reason);
 
 X509_CRL *ca_build_crl(CADaemon *ca);

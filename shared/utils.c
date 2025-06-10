@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L  // for getpwuid_r
 #include <stdio.h>
 #include <stdlib.h>     // getenv
+#include <stdint.h>
 #include <string.h>
 #include <unistd.h>     // getuid
 #include <pwd.h>        // getpwuid_r
@@ -164,4 +165,25 @@ char *build_app_support_path(const char *bundleID)
         free((void*)home);
     }
     return path;
+}
+
+void print_bytes(uint8_t *buf, uint32_t length) {
+    // Header
+    DEBUG_LOG("Buffer (%u bytes):", length);
+
+    // Print 16 bytes per line with offset
+    for (uint32_t offset = 0; offset < length; offset += 16) {
+        uint32_t line_len = length - offset;
+        if (line_len > 16) line_len = 16;
+
+        // Build the line: "0000: AA BB CC ..."
+        char line[16 * 3 + 10] = {0};
+        char *p = line;
+        p += sprintf(p, "%04X: ", offset);
+        for (uint32_t i = 0; i < line_len; ++i) {
+            p += sprintf(p, "%02X ", buf[offset + i]);
+        }
+
+        DEBUG_LOG("%s", line);
+    }
 }

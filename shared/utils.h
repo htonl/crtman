@@ -1,5 +1,5 @@
 #include <stdio.h>
-
+#include <stdint.h>
 
 /* Some debugging macros */
 #if DEBUG
@@ -88,3 +88,10 @@ char *build_preferences_path(const char *bundleID);
  */
 char *build_app_support_path(const char *bundleID);
 
+/*
+ * Pretty-print a byte buffer in hex with offsets.
+ *
+ * @param buf     Pointer to the byte buffer.
+ * @param length  Number of bytes in the buffer.
+ */
+void print_bytes(uint8_t *buf, uint32_t length);
