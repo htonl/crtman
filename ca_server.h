@@ -69,18 +69,10 @@ CA_STATUS ca_issue_cert(CADaemon *ca,
                    const char *profile,
                    char      **cert_pem_out,
                    char      **serial_out);
-
-int  ca_revoke_cert(CADaemon *ca,
+CA_STATUS ca_revoke_cert(CADaemon *ca,
                     const char *serial,
                     int          reason_code);
-int  ca_get_crl(CADaemon *ca, char **crl_pem_out);
-
-// Internal helpers (you’ll implement)
-X509_REQ *ca_parse_csr(const char *csr_pem);
-X509     *ca_build_cert(CADaemon *ca, X509_REQ *req,
-                        ASN1_INTEGER *serial,
-                        unsigned       valid_seconds,
-                        const char    *profile);
+CA_STATUS ca_get_crl(CADaemon *ca, char **crl_pem_out);
 
 int  ca_record_revocation(CADaemon *ca, const char *serial, int reason);
 

@@ -18,6 +18,7 @@
 #include <openssl/x509.h>
 #include <openssl/err.h>
 #include <Security/Security.h>
+#include <pthread.h>
 
 /*
  * @brief CADaemon object
@@ -28,10 +29,28 @@ struct CADaemon
     SecKeyRef  ca_pk;
     X509      *ca_cert;
     CADaemonState  state;
+    FILE *serial_fd;
+    FILE *index_fd;
+    pthread_mutex_t index_lock;
 };
 
-static void build_db_path(const CAConfig *cfg, const char *filename, char *out, size_t outlen) {
+static void build_db_path(const CAConfig *cfg, const char *filename, char *out, size_t outlen)
+{
     snprintf(out, outlen, "%s/%s", cfg->db_dir, filename);
+}
+
+static void ca_lock_index_file(CADaemon *ca)
+{
+    REQUIRE_ACTION(ca != NULL, return;);
+
+    pthread_mutex_lock(&ca->index_lock);
+}
+
+static void ca_unlock_index_file(CADaemon *ca)
+{
+    REQUIRE_ACTION(ca != NULL, return;);
+
+    pthread_mutex_unlock(&ca->index_lock);
 }
 
 static CA_STATUS generate_self_signed_cert(CADaemon *ca, X509 **cert);
@@ -40,78 +59,87 @@ static CA_STATUS generate_self_signed_cert(CADaemon *ca, X509 **cert);
 
 ASN1_INTEGER *ca_next_serial(CADaemon *ca)
 {
-    char path[PATH_MAX];
-    build_db_path(ca->cfg, "serial", path, sizeof(path));
-    FILE *f = fopen(path, "r+");
     unsigned long s = 1;
-    if (!f) {
-        f = fopen(path, "w");
-        REQUIRE_ACTION(f != 0, return NULL;);
 
-        fprintf(f, "%lX", s + 1);
-        fclose(f);
+    REQUIRE_ACTION(ca != NULL, return NULL;);
+
+    // Grab the index file lock
+    ca_lock_index_file(ca);
+
+    if (fscanf(ca->serial_fd, "%lx", &s) != 1)
+    {
+        fprintf(ca->serial_fd, "%lX", s + 1);
     }
     else
     {
-        if (fscanf(f, "%lx", &s) != 1)
-        {
-            DEBUG_LOG("Failed reading file %d", s);
-            fclose(f);
-            return NULL;
-        }
-
-        rewind(f);
-        fprintf(f, "%lX", s + 1);
-        fclose(f);
+        rewind(ca->serial_fd);
+        fprintf(ca->serial_fd, "%lX", s + 1);
     }
+
+    // Flush no matter what
+    fflush(ca->serial_fd);
 
     ASN1_INTEGER *asi = ASN1_INTEGER_new();
 
     if (!asi)
     {
+        ca_unlock_index_file(ca);
         return NULL;
     }
 
     ASN1_INTEGER_set(asi, s);
+
+    ca_unlock_index_file(ca);
 
     return asi;
 }
 
 CA_STATUS ca_record_cert(CADaemon *ca, X509 *cert)
 {
-    // TODO: format
     CA_STATUS status = CA_OK;
-    char path[PATH_MAX];
-    FILE *f = NULL;
     BIGNUM *bn = NULL;
-    char *hex = NULL;
+    char *serial_hex = NULL;
     char *subject = NULL;
+    char datestr[32];
+    time_t now = time(NULL);
+    struct tm gm;
 
-    build_db_path(ca->cfg, "index.txt", path, sizeof(path));
+    REQUIRE_ACTION(ca != NULL, return CA_ERR_BAD_PARAM;);
+    REQUIRE_ACTION(cert != NULL, return CA_ERR_BAD_PARAM;);
+    REQUIRE_ACTION(ca->index_fd != NULL, return CA_ERR_INTERNAL;);
 
-    f = fopen(path, "a");
-    EXIT_IF(!f, status, CA_ERR_INTERNAL, "Failed to open index file");
+    ca_lock_index_file(ca);
 
     ASN1_INTEGER *asi = X509_get_serialNumber(cert);
     bn = ASN1_INTEGER_to_BN(asi, NULL);
     EXIT_IF(!bn, status, CA_ERR_INTERNAL, "Failed to ASN1_INTEGER_to_BN");
 
-    hex = BN_bn2hex(bn);
-    EXIT_IF(!hex, status, CA_ERR_INTERNAL, "Failed to BN_bn2hex");
+    serial_hex = BN_bn2hex(bn);
+    EXIT_IF(!serial_hex, status, CA_ERR_INTERNAL, "Failed to BN_bn2hex");
 
     subject = X509_NAME_oneline(X509_get_subject_name(cert), NULL, 0);
     EXIT_IF(!subject, status, CA_ERR_INTERNAL, "Failed to X509_NAME_oneline");
 
-    fprintf(f, "V			%s	%s\n", hex, subject);
+    // Grab the timestamp
+    if (!gmtime_r(&now, &gm)) {
+        return CA_ERR_INTERNAL;
+    }
+    if (strftime(datestr, sizeof(datestr), "%Y%m%d%H%M%SZ", &gm) == 0) {
+        return CA_ERR_INTERNAL;
+    }
+
+    fseek(ca->index_fd, 0, SEEK_END);
+    fprintf(ca->index_fd, "V\t%s\t%s\t%s\n", datestr, serial_hex, subject);
+    fflush(ca->index_fd);
     status = CA_OK;
 
+
 exit:
-    if (f)
-    {
-        fclose(f);
-    }
+
+    ca_unlock_index_file(ca);
+
     FREE_IF_NOT_NULL(bn, BN_free);
-    FREE_IF_NOT_NULL(hex, OPENSSL_free);
+    FREE_IF_NOT_NULL(serial_hex, OPENSSL_free);
     FREE_IF_NOT_NULL(subject, OPENSSL_free);
 
     return status ;
@@ -369,6 +397,7 @@ static CA_STATUS lazy_get_keypair(CADaemon *ca)
 CA_STATUS ca_init(const CAConfig *cfg, CADaemon **out)
 {
     CA_STATUS status = CA_OK;
+    char path[PATH_MAX];
 
     REQUIRE_ACTION(cfg != NULL, return CA_ERR_BAD_PARAM;);
     REQUIRE_ACTION(out != NULL, return CA_ERR_BAD_PARAM;);
@@ -377,18 +406,43 @@ CA_STATUS ca_init(const CAConfig *cfg, CADaemon **out)
     REQUIRE_ACTION(ca != NULL, return CA_ERR_MEMORY;);
 
     ca->state = STARTING;
+    ca->serial_fd = NULL;
+    ca->index_fd = NULL;
 
-    // Setup the config
+    // 0) Setup the config
     ca->cfg = cfg;
 
+    // 1) Init the CA keys
     status = lazy_get_keypair(ca);
     REQUIRE_ACTION(status == CA_OK, return CA_ERR_INTERNAL;);
 
-    // TODO verify the ca is setup before returning success
+    // 2) Init serial file - used to track serial numbers
+    build_db_path(ca->cfg, "serial", path, sizeof(path));
+    ca->serial_fd = fopen(path, "a+");
+    EXIT_IF(!ca->serial_fd, status, CA_ERR_INTERNAL, "Failed to open serial file");
+
+    // 3) Init index file - used to track issued certs and revocation
+    build_db_path(ca->cfg, "index.txt", path, sizeof(path));
+    ca->index_fd = fopen(path, "a+");
+    EXIT_IF(!ca->index_fd, status, CA_ERR_INTERNAL, "Failed to open serial file");
+
+    // 4) Lock for the index file - unnecessary for serial daemon
+    pthread_mutex_init(&ca->index_lock, NULL);
+
+    // 5) Good to go
     ca->state = RUNNING;
     *out = ca;
 
-    return CA_OK;
+exit:
+    if (status != CA_OK && ca)
+    {
+        FREE_IF_NOT_NULL(ca, free);
+        FREE_IF_NOT_NULL(ca->serial_fd, fclose);
+        FREE_IF_NOT_NULL(ca->index_fd, fclose);
+        pthread_mutex_destroy(&ca->index_lock);
+    }
+
+    return status;
 }
 
 void ca_shutdown(CADaemon **ca)
@@ -401,6 +455,9 @@ void ca_shutdown(CADaemon **ca)
     local->state = STOPPING;
 
     FREE_IF_NOT_NULL(local->ca_cert, X509_free);
+    FREE_IF_NOT_NULL(local->serial_fd, fclose);
+    FREE_IF_NOT_NULL(local->index_fd, fclose);
+    pthread_mutex_destroy(&local->index_lock);
 
     local->ca_pk = NULL;
 
@@ -453,7 +510,6 @@ CA_STATUS ca_issue_cert(CADaemon *ca,
                     char      **cert_pem_out,
                     char      **serial_out)
 {
-    // TODO: test this function
     int ret = 0;
     X509_REQ *req = NULL;
     EVP_PKEY *csr_pubkey = NULL;
@@ -622,4 +678,35 @@ exit:
     }
 
     return status;
+}
+
+CA_STATUS ca_revoke_cert(CADaemon *ca, const char *serial, int reason_code) {
+
+    // Get current UTC time as YYYYMMDDHHMMSSZ
+    char datestr[32];
+    time_t now = time(NULL);
+    struct tm gm;
+
+    REQUIRE_ACTION(ca != NULL, return CA_ERR_BAD_PARAM;);
+    REQUIRE_ACTION(serial != NULL, return CA_ERR_BAD_PARAM;);
+    REQUIRE_ACTION(ca->index_fd != NULL, return CA_ERR_INTERNAL;);
+
+    // Lock the index file
+    ca_lock_index_file(ca);
+
+    if (!gmtime_r(&now, &gm)) {
+        return CA_ERR_INTERNAL;
+    }
+    if (strftime(datestr, sizeof(datestr), "%Y%m%d%H%M%SZ", &gm) == 0) {
+        return CA_ERR_INTERNAL;
+    }
+
+    // Append: R<TAB><date><TAB><reason><TAB><serial>\n
+    fseek(ca->index_fd, 0, SEEK_END);
+    fprintf(ca->index_fd, "R\t%s\t%s\t%d\n", datestr, serial, reason_code);
+    fflush(ca->index_fd);
+
+    // Unlock the index file
+    ca_unlock_index_file(ca);
+    return CA_OK;
 }

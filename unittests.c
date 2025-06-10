@@ -145,6 +145,10 @@ int main(int argc, char **argv)
     written = fprintf(f, "%s", cert_pem);
     EXIT_IF(written == 0, status, CA_ERR_INTERNAL, "Failed to write issued cert to file");
 
+    // 5. Revoke the cert
+    status = ca_revoke_cert(ca, serial, 1);
+    EXIT_IF_ERR(status, "ca_revoke_cert failed: %d", status);
+
     // 5) Shutdown the CA
     ca_shutdown(&ca);
 
