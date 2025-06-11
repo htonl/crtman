@@ -4,11 +4,11 @@
  *
  * ca_server.h - Public API for crtman daemon internals
  */
+#ifndef _H_CA_SERVER_H_
+#define _H_CA_SERVER_H_
+
 #include <openssl/x509.h>
 #include <stdbool.h>
-
-#ifndef _H_CA_SERVER_H
-#define _H_CA_SERVER_H
 
 /* 
  * @brief Opaque CADaemon object
@@ -115,4 +115,4 @@ CA_STATUS ca_revoke_cert(CADaemon *ca,
  */
 CA_STATUS ca_get_crl(CADaemon *ca, char **crl_pem_out);
 
-#endif /* _H_CA_SERVER_H */
+#endif /* _H_CA_SERVER_H_ */

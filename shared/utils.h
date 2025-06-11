@@ -4,11 +4,11 @@
  *
  * utils.h - Useful macros/helpers for error handling/logging/debugging
  */
-#include <stdio.h>
-#include <stdint.h>
-
 #ifndef _UTILS_H_
 #define _UTILS_H_
+
+#include <stdio.h>
+#include <stdint.h>
 
 /* Some debugging macros */
 #if DEBUG
