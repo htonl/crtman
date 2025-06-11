@@ -1,5 +1,14 @@
+/*
+ * Copyright (c) 2025 Luke, lcesarz@pm.me
+ * SPDX-License-Identifier: MIT
+ *
+ * utils.h - Useful macros/helpers for error handling/logging/debugging
+ */
 #include <stdio.h>
 #include <stdint.h>
+
+#ifndef _UTILS_H_
+#define _UTILS_H_
 
 /* Some debugging macros */
 #if DEBUG
@@ -95,3 +104,5 @@ char *build_app_support_path(const char *bundleID);
  * @param length  Number of bytes in the buffer.
  */
 void print_bytes(uint8_t *buf, uint32_t length);
+
+#endif /* _UTILS_H_ */

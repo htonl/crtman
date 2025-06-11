@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Luke, lcesarz@pm.me
+ * SPDX-License-Identifier: MIT
+ *
+ * unittests.c - Crtman unittest driver program
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

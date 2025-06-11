@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Luke
+ * SPDX-License-Identifier: MIT
+ *
+ * utils.c - Useful macros/helpers for error handling/logging/debugging
+ */
 #define _POSIX_C_SOURCE 200809L  // for getpwuid_r
 #include <stdio.h>
 #include <stdlib.h>     // getenv

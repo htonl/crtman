@@ -1,10 +1,9 @@
-// ca_server.c
-//
-// Luke Cesarz
-//
-// lcesarz@pm.me
-//
-
+/*
+ * Copyright (c) 2025 Luke, lcesarz@pm.me
+ * SPDX-License-Identifier: MIT
+ *
+ * ca_server.c - Crtman daemon internals
+ */
 #include <utils.h>
 #include "ca_server.h"
 #include <stdlib.h>

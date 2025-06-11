@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Luke, lcesarz@pm.me
+ * SPDX-License-Identifier: MIT
+ *
+ * main.c - Crtman daemon main
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
