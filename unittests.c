@@ -10,7 +10,9 @@
 /*
  * Test key generated via
  * openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out test.key.pem
- */
+ *
+ * Shouldn't need the private key, just saving it in case we ever need it.
+ *
 static const char *kTestPrivateKeyPem =
     "-----BEGIN PRIVATE KEY-----\n"
 "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDshu96ifrMtrcb\n"
@@ -40,6 +42,7 @@ static const char *kTestPrivateKeyPem =
 "tA1NrQRahxbUs8HUv2rq0cWI3ZrOBw/1vqSu0Rte+J3+TnXwvd0+Vhkm06KH8w2C\n"
 "J7EFuls+wHDuRBUmisOFjyc=\n"
 "-----END PRIVATE KEY-----";
+ */
 
 /*
  * Test CSR generated via below command using hardcoded key above
@@ -82,7 +85,13 @@ int main(int argc, char **argv)
     char *crl_pem = NULL;
     char issued_path[PATH_MAX];
     int written = 0;
+    char *PEM = NULL;
 
+    if (argc < 4)
+    {
+        printf("Usage: ./unittests <DB_DIR> <CA_LABEL> <VALIDITY>\n");
+        return 0;
+    }
     /*
      * TEST)
      *  build_preferences_path()
@@ -123,7 +132,6 @@ int main(int argc, char **argv)
     printf("✅ ca_init: Generated key and CA certificate.\n");
 
     // 3) Get the CA cert and print it
-    char *PEM;
     status = ca_get_ca_cert(ca, &PEM);
     EXIT_IF_ERR(status, "ca_get_ca_cert failed: %d\n", status);
 
