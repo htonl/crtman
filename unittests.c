@@ -79,6 +79,7 @@ int main(int argc, char **argv)
     FILE *fs = NULL;
     char *cert_pem = NULL;
     char *serial = NULL;
+    char *crl_pem = NULL;
     char issued_path[PATH_MAX];
     int written = 0;
 
@@ -133,6 +134,7 @@ int main(int argc, char **argv)
     status = ca_issue_cert(ca, kTestCsrPem, 365, "server", &cert_pem, &serial);
     EXIT_IF_ERR(status, "ca_issue_cert failed: %d", status);
 
+    printf("✅ ca_issue_cert. \n");
     printf("Issued Certificate (serial %s):\n%s\n", serial, cert_pem);
 
     // Write the cert to a file to be verified
@@ -148,8 +150,16 @@ int main(int argc, char **argv)
     // 5. Revoke the cert
     status = ca_revoke_cert(ca, serial, 1);
     EXIT_IF_ERR(status, "ca_revoke_cert failed: %d", status);
+    printf("✅ ca_revoke_cert \n");
 
-    // 5) Shutdown the CA
+    // 6. Get the CRL list
+    status = ca_get_crl(ca, &crl_pem);
+    EXIT_IF_ERR(status, "ca_get_crl failed: %d", status);
+
+    printf("✅ ca_get_crl\n");
+    printf("CRL:\n %s\n", crl_pem);
+
+    // 7) Shutdown the CA
     ca_shutdown(&ca);
 
 exit:

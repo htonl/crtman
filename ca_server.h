@@ -62,19 +62,48 @@ CA_STATUS ca_init(const CAConfig *cfg, CADaemon **out);
 void ca_shutdown(CADaemon **ca);
 
 // Handlers for each command
+
+/*
+ * @brief Get the CA public certificate
+ *
+ * @param [in] CADaemon to retrieve the cert from
+ * @param [out] Internally allocated cert pem
+ */
 CA_STATUS ca_get_ca_cert(CADaemon *ca, char **pem_out);
+
+/*
+ * @brief Handle CSR request
+ *
+ * @param [in] cs CADaemon to sign the certificate
+ * @param [in] csr_pem the CSR from the client
+ * @param [in] valid_days the number of days for the new cert to be valid
+ * @param [in] profile The profile of new certificate - currently unused
+ * @param [out] cert_pem_out Internally allocated output certificate in pem format
+ * @param [out] serial_out Internally allocated serial number of the output cert
+ */
 CA_STATUS ca_issue_cert(CADaemon *ca,
                    const char *csr_pem,
                    unsigned    valid_days,
                    const char *profile,
                    char      **cert_pem_out,
                    char      **serial_out);
+
+/*
+ * @brief Handle revoke request
+ *
+ * @param [in] ca CADaemon to revoke the certificate for
+ * @param [in] serial The serial number of the certificate to revoke
+ * @param [in reason_code The reason for revoking the certificate
+ */
 CA_STATUS ca_revoke_cert(CADaemon *ca,
                     const char *serial,
                     int          reason_code);
+
+/*
+ * @brief get the CRL for the CA
+ *
+ * @param [in] ca CADaemon to retrieve the CRL from
+ * @param [out] crl_pem_out the CRL of the CA in pem format
+ */
 CA_STATUS ca_get_crl(CADaemon *ca, char **crl_pem_out);
-
-int  ca_record_revocation(CADaemon *ca, const char *serial, int reason);
-
-X509_CRL *ca_build_crl(CADaemon *ca);
 

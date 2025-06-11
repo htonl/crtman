@@ -49,4 +49,4 @@ runtests:
 	openssl verify -CAfile db/ca.cert.pem db/ca.cert.pem
 	cat db/ca.cert.pem db/issued.cert.pem > db/issued_chain.pem
 	openssl verify -CAfile db/ca.cert.pem db/issued_chain.pem
-
+	openssl verify -CAfile db/ca.cert.pem -CRLfile db/crl.pem -crl_check db/issued_chain.pem
