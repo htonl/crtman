@@ -173,6 +173,9 @@ int main(int argc, char **argv)
     printf("✅ ca_get_crl\n");
     printf("CRL:\n %s\n", crl_pem);
 
+    // TODO:
+    // handle_command_tests();
+
     // 7) Shutdown the CA
     ca_shutdown(&ca);
 
