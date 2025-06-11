@@ -2,6 +2,8 @@
 
 A minimal Certificate Authority daemon for macOS that stores its private key in the MacOS Keychain via Apple’s Security.framework, and uses OpenSSL’s low-level APIs to parse CSRs, build X.509 certificates, and generate CRLs. Communication is exposed over a TLS-wrapped UNIX or TCP socket with a JSON/newline protocol.
 
+This project is a work in progress, see TODO file for next steps.
+
 ---
 
 ## Features

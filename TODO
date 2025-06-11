@@ -1,0 +1,8 @@
+1. Add request parsing code
+    1a. Add request parsing API's to handle the JSON from web requests
+    1b. Add unit tests for all parsing
+2. Make it a daemon
+    1a. Add socket handling for receiving requests
+    1b. Create a client tool to call it (static library with driver program)
+    1c. Wrap communications in TLS/SSL
+    1d. XPC API for local (admin)  interaction?
