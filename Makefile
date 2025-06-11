@@ -44,9 +44,4 @@ $(TEST_TARGET): $(TEST_OBJ)
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 runtests:
-	mkdir -p db
-	./unittests db com.example.myCA 31536000
-	openssl verify -CAfile db/ca.cert.pem db/ca.cert.pem
-	cat db/ca.cert.pem db/issued.cert.pem > db/issued_chain.pem
-	openssl verify -CAfile db/ca.cert.pem db/issued_chain.pem
-	openssl verify -CAfile db/ca.cert.pem -CRLfile db/crl.pem -crl_check db/issued_chain.pem
+	python3 unit_test.py
