@@ -75,11 +75,22 @@
         }                  \
     } while (0)
 
-/* Error definitions */
-#define STATUS_SUCCESS 0
-#define STATUS_BAD_PARAM -1000
-#define STATUS_NO_MEM -1001
-#define STATUS_INTERNAL_ERR -1002
+/*
+ * @brief Error codes
+ */
+typedef enum
+{
+    CA_OK                  =  0,
+    CA_ERR_INTERNAL        = 100,
+    CA_ERR_BAD_PARAM       = 110,
+    CA_ERR_MEMORY          = 120,
+    CA_ERR_BAD_CSR         = 200,
+    CA_ERR_POLICY          = 210,
+    CA_ERR_NOT_FOUND       = 300,
+    CA_ERR_ALREADY_REVOKED = 310,
+} ca_status_t;
+
+#define CA_STATUS ca_status_t
 
 typedef int status_t;
 

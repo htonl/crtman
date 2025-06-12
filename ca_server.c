@@ -51,7 +51,7 @@ static CA_STATUS ca_generate_keypair(CADaemon *ca);
 static CA_STATUS generate_self_signed_cert(CADaemon *ca, X509 **cert);
 static CA_STATUS lazy_get_keypair(CADaemon *ca);
 static X509_CRL *ca_build_crl_from_index(CADaemon *ca);
-CA_STATUS ca_build_crl(CADaemon *ca, char **crl_pem_out);
+CA_STATUS ca_build_crl(CADaemon *ca, char **crl_pem_out, uint32_t *crl_pem_length);
 
 /*
  * Public API implementation
@@ -133,7 +133,7 @@ void ca_shutdown(CADaemon **ca)
     FREE_IF_NOT_NULL(local, free);
 }
 
-CA_STATUS ca_get_ca_cert(CADaemon *ca, char **pem_out)
+CA_STATUS ca_get_ca_cert(CADaemon *ca, char **pem_out, uint32_t *pem_length)
 {
     BIO *bio = NULL;
     BUF_MEM *bptr = NULL;
@@ -161,6 +161,7 @@ CA_STATUS ca_get_ca_cert(CADaemon *ca, char **pem_out)
     buf[bptr->length] = '\0';
 
     *pem_out = buf;
+    *pem_length = bptr->length;
 exit:
 
     FREE_IF_NOT_NULL(bio, BIO_free);
@@ -177,7 +178,9 @@ CA_STATUS ca_issue_cert(CADaemon *ca,
                     unsigned    valid_days,
                     const char *profile,
                     char      **cert_pem_out,
-                    char      **serial_out)
+                    uint32_t   *cert_pem_length,
+                    char      **serial_out,
+                    uint32_t   *serial_length)
 {
     int ret = 0;
     X509_REQ *req = NULL;
@@ -323,7 +326,9 @@ CA_STATUS ca_issue_cert(CADaemon *ca,
 
     // 14) Return cert && serial hex
     *cert_pem_out = (char *)pem_buf;
+    *cert_pem_length = bptr->length;
     *serial_out = serial_hex;
+    *serial_length = strlen(serial_hex);
 
     status = CA_OK;
 
@@ -383,18 +388,20 @@ CA_STATUS ca_revoke_cert(CADaemon *ca, const char *serial, int reason_code) {
     return CA_OK;
 }
 
-CA_STATUS ca_get_crl(CADaemon *ca, char **crl_pem_out)
+CA_STATUS ca_get_crl(CADaemon *ca, char **crl_pem_out, uint32_t *crl_length)
 {
     CA_STATUS status = CA_OK;
     char *local_crl_pem = NULL;
+    uint32_t local_crl_pem_length = 0;
 
     REQUIRE_ACTION(ca != NULL, return CA_ERR_BAD_PARAM;);
     REQUIRE_ACTION(crl_pem_out != NULL, return CA_ERR_BAD_PARAM;);
 
-    status = ca_build_crl(ca, &local_crl_pem);
+    status = ca_build_crl(ca, &local_crl_pem, &local_crl_pem_length);
     EXIT_IF_ERR(status, "Failed to build crl");
 
     *crl_pem_out = local_crl_pem;
+    *crl_length = local_crl_pem_length;
 
 exit:
 
@@ -931,7 +938,7 @@ exit:
     }
 }
 
-extern CA_STATUS ca_build_crl(CADaemon *ca, char **crl_pem_out)
+extern CA_STATUS ca_build_crl(CADaemon *ca, char **crl_pem_out, uint32_t *crl_pem_length)
 {
 
     CA_STATUS status     = CA_OK;
@@ -1015,6 +1022,7 @@ extern CA_STATUS ca_build_crl(CADaemon *ca, char **crl_pem_out)
     pem_buf[bptr->length] = '\0';
 
     *crl_pem_out = (char *)pem_buf;
+    *crl_pem_length = bptr->length;
 
 exit:
     if (status != CA_OK)

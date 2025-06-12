@@ -4,9 +4,10 @@
  *
  * handle_request.h - Public API for crtman handling JSON requests 
  */
-#ifdef _HANDLE_REQUEST_H_
+#ifndef _HANDLE_REQUEST_H_
 #define _HANDLE_REQUEST_H_
 
+#include "ca_server.h"
 #include <utils.h>
 
 /*
@@ -70,7 +71,7 @@
  * @param [in] request The incoming request for crtman
  * @param [out] response The response to the request
  */
-CA_STATUS handle_request(const char *request, const char **response);
+CA_STATUS handle_request(CADaemon *ca, const char *request, char **response);
 
 #endif /* _HANDLE_REQUEST_H_ */
 

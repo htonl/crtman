@@ -1,11 +1,10 @@
 #include "handle_request.h"
-#include <cJSON.h>
 #include "ca_server.h"
+#include <cJSON.h>
 #include <stdlib.h>
 #include <string.h>
 
-// Global CA context, initialized elsewhere
-extern CADaemon *g_ca;
+// TODO: this file needs formatting
 
 // Enumeration of supported commands
 typedef enum {
@@ -17,18 +16,20 @@ typedef enum {
 } Command;
 
 // Static helpers
-static CA_STATUS handle_get_ca_cert_req(cJSON *req, char **resp);
-static CA_STATUS handle_issue_cert_req(cJSON *req, char **resp);
-static CA_STATUS handle_revoke_cert_req(cJSON *req, char **resp);
-static ca_status handle_get_crl_req(cJSON *req, char **resp);
+static CA_STATUS handle_get_ca_cert_req(CADaemon *ca, cJSON *req, char **resp);
+static CA_STATUS handle_issue_cert_req(CADaemon *ca, cJSON *req, char **resp);
+static CA_STATUS handle_revoke_cert_req(CADaemon *ca, cJSON *req, char **resp);
+static CA_STATUS handle_get_crl_req(CADaemon *ca, cJSON *req, char **resp);
 static Command parse_command(const char *cmd_str);
 static char *build_error_json(int error_code, const char *message);
 
 /*
  * handle_request assumes the caller has authenticated the request
  */
-CA_STATUS handle_request(const char *request, char **response) {
-    if (!request || !response) return CA_ERR_INTERNAL;
+CA_STATUS handle_request(CADaemon *ca, const char *request, char **response)
+{
+    REQUIRE_ACTION(request != NULL, return CA_ERR_BAD_PARAM;);
+    REQUIRE_ACTION(response != NULL, return CA_ERR_BAD_PARAM;);
 
     cJSON *root = cJSON_Parse(request);
     if (!root) {
@@ -45,16 +46,16 @@ CA_STATUS handle_request(const char *request, char **response) {
     CA_STATUS st;
     switch (cmd) {
         case CMD_GET_CA_CERT:
-            st = handle_get_ca_cert_req(root, response);
+            st = handle_get_ca_cert_req(ca, root, response);
             break;
         case CMD_ISSUE_CERT:
-            st = handle_issue_cert_req(root, response);
+            st = handle_issue_cert_req(ca, root, response);
             break;
         case CMD_REVOKE_CERT:
-            st = handle_revoke_cert_req(root, response);
+            st = handle_revoke_cert_req(ca, root, response);
             break;
         case CMD_GET_CRL:
-            st = handle_get_crl_req(root, response);
+            st = handle_get_crl_req(ca, root, response);
             break;
         default:
             *response = build_error_json(202, "Unknown command");
@@ -95,10 +96,12 @@ static char *build_error_json(int error_code, const char *message) {
  * @param [in] request The incoming request for crtman
  * @param [out] response The response to the request
  */
-static CA_STATUS handle_get_ca_cert_req(cJSON *req, char **resp) {
+static CA_STATUS handle_get_ca_cert_req(CADaemon *ca, cJSON *req, char **resp)
+{
     (void)req;
     char *pem = NULL;
-    CA_STATUS st = ca_get_ca_cert(g_ca, &pem);
+    uint32_t pem_length = 0;
+    CA_STATUS st = ca_get_ca_cert(ca, &pem, &pem_length);
     if (st != CA_OK) {
         *resp = build_error_json(101, "GetCACert failed");
         return st;
@@ -118,7 +121,8 @@ static CA_STATUS handle_get_ca_cert_req(cJSON *req, char **resp) {
  * @param [in] request The incoming request for crtman
  * @param [out] response The response to the request
  */
-static CA_STATUS handle_issue_cert_req(cJSON *req, char **resp) {
+static CA_STATUS handle_issue_cert_req(CADaemon *ca, cJSON *req, char **resp)
+{
     cJSON *jcsr = cJSON_GetObjectItem(req, "csr_pem");
     cJSON *jvd  = cJSON_GetObjectItem(req, "valid_days");
     cJSON *jprf = cJSON_GetObjectItem(req, "profile");
@@ -132,8 +136,10 @@ static CA_STATUS handle_issue_cert_req(cJSON *req, char **resp) {
 
     char *cert_pem = NULL;
     char *serial   = NULL;
-    CA_STATUS st = ca_issue_cert(g_ca, csr_pem, valid_days, profile,
-                                  &cert_pem, &serial);
+    uint32_t cert_pem_length = 0;
+    uint32_t serial_length = 0;
+    CA_STATUS st = ca_issue_cert(ca, csr_pem, valid_days, profile,
+                                  &cert_pem, &cert_pem_length, &serial, &serial_length);
     if (st != CA_OK) {
         *resp = build_error_json(103, "IssueCert failed");
         return st;
@@ -155,7 +161,8 @@ static CA_STATUS handle_issue_cert_req(cJSON *req, char **resp) {
  * @param [in] request The incoming request for crtman
  * @param [out] response The response to the request
  */
-static CA_STATUS handle_revoke_cert_req(cJSON *req, char **resp) {
+static CA_STATUS handle_revoke_cert_req(CADaemon *ca, cJSON *req, char **resp)
+{
     cJSON *jsn = cJSON_GetObjectItem(req, "serial");
     cJSON *jrs = cJSON_GetObjectItem(req, "reason_code");
     if (!cJSON_IsString(jsn) || !cJSON_IsNumber(jrs)) {
@@ -165,7 +172,7 @@ static CA_STATUS handle_revoke_cert_req(cJSON *req, char **resp) {
     const char *serial = jsn->valuestring;
     int reason = jrs->valueint;
 
-    CA_STATUS st = ca_revoke_cert(g_ca, serial, reason);
+    CA_STATUS st = ca_revoke_cert(ca, serial, reason);
     if (st != CA_OK) {
         *resp = build_error_json(105, "RevokeCert failed");
         return st;
@@ -183,10 +190,12 @@ static CA_STATUS handle_revoke_cert_req(cJSON *req, char **resp) {
  * @param [in] request The incoming request for crtman
  * @param [out] response The response to the request
  */
-static CA_STATUS handle_get_crl_req(cJSON *req, char **resp) {
+static CA_STATUS handle_get_crl_req(CADaemon *ca, cJSON *req, char **resp)
+{
     (void)req;
     char *crl_pem = NULL;
-    CA_STATUS st = ca_build_crl(g_ca, &crl_pem);
+    uint32_t crl_pem_length = 0;
+    CA_STATUS st = ca_get_crl(ca, &crl_pem, &crl_pem_length);
     if (st != CA_OK) {
         *resp = build_error_json(106, "GetCRL failed");
         return st;

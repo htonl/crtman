@@ -6,8 +6,7 @@
  */
 #ifndef _H_CA_SERVER_H_
 #define _H_CA_SERVER_H_
-
-#include <openssl/x509.h>
+#include <utils.h>
 #include <stdbool.h>
 
 /* 
@@ -27,20 +26,6 @@ typedef struct
     bool        provision_key;    // Provision the private/pubkeys
 } CAConfig;
 
-/*
- * @brief Error codes
- */
-typedef enum
-{
-    CA_OK                  =  0,
-    CA_ERR_INTERNAL        = 100,
-    CA_ERR_BAD_PARAM       = 110,
-    CA_ERR_MEMORY          = 120,
-    CA_ERR_BAD_CSR         = 200,
-    CA_ERR_POLICY          = 210,
-    CA_ERR_NOT_FOUND       = 300,
-    CA_ERR_ALREADY_REVOKED = 310,
-} ca_status_t;
 
 /*
  * @brief State for the daemon
@@ -51,8 +36,6 @@ typedef enum
     RUNNING = 1,
     STOPPING = 1,
 } CADaemonState;
-
-#define CA_STATUS ca_status_t
 
 /*
  * @brief Initialize the CA: load/generate CA key & cert, open DB files
@@ -77,7 +60,7 @@ void ca_shutdown(CADaemon **ca);
  * @param [in] CADaemon to retrieve the cert from
  * @param [out] Internally allocated cert pem
  */
-CA_STATUS ca_get_ca_cert(CADaemon *ca, char **pem_out);
+CA_STATUS ca_get_ca_cert(CADaemon *ca, char **pem_out, uint32_t *pem_length);
 
 /*
  * @brief Handle CSR request
@@ -87,14 +70,18 @@ CA_STATUS ca_get_ca_cert(CADaemon *ca, char **pem_out);
  * @param [in] valid_days the number of days for the new cert to be valid
  * @param [in] profile The profile of new certificate - currently unused
  * @param [out] cert_pem_out Internally allocated output certificate in pem format
+ * @param [out] cert_pem_length Length of allocated output certificate in pem format
  * @param [out] serial_out Internally allocated serial number of the output cert
+ * @param [out] serial_length Length of allocated serial number of the output cert
  */
 CA_STATUS ca_issue_cert(CADaemon *ca,
                    const char *csr_pem,
                    unsigned    valid_days,
                    const char *profile,
                    char      **cert_pem_out,
-                   char      **serial_out);
+                   uint32_t    *cert_pem_length,
+                   char      **serial_out,
+                   uint32_t    *serial_length);
 
 /*
  * @brief Handle revoke request
@@ -112,7 +99,8 @@ CA_STATUS ca_revoke_cert(CADaemon *ca,
  *
  * @param [in] ca CADaemon to retrieve the CRL from
  * @param [out] crl_pem_out the CRL of the CA in pem format
+ * @param [out] crl_pem_length the length of the CRL
  */
-CA_STATUS ca_get_crl(CADaemon *ca, char **crl_pem_out);
+CA_STATUS ca_get_crl(CADaemon *ca, char **crl_pem_out, uint32_t *crl_pem_length);
 
 #endif /* _H_CA_SERVER_H_ */

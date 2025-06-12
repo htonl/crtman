@@ -2,18 +2,19 @@
 
 # BoringSSL
 BORINGSSL := vendor/boringssl
+CJSON := vendor/cJSON
 
 CC        := clang
-CFLAGS    := -Ishared -I$(BORINGSSL)/include -std=c11 -Wall -Wextra -DDEBUG
+CFLAGS    := -Ishared -I$(BORINGSSL)/include -I$(CJSON) -std=c11 -Wall -Wextra -DDEBUG
 LDFLAGS   := $(BORINGSSL)/build/libcrypto.a -framework Security -framework CoreFoundation
 
-# Main executable
+# Main executable, not a daemon yet. WIP is from unittest target
 SRC       := ca_server.c main.c shared/utils.c
 OBJ       := $(SRC:.c=.o)
 TARGET    := ca_test
 
 # Unit test executable
-TEST_SRC  := ca_server.c unittests.c shared/utils.c
+TEST_SRC  := ca_server.c unittests.c shared/utils.c handle_request.c vendor/cJSON/cJSON.c
 TEST_OBJ  := $(TEST_SRC:.c=.o)
 TEST_TARGET := unittests
 

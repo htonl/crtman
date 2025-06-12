@@ -4,12 +4,14 @@
  *
  * unittests.c - Crtman unittest driver program
  */
+#include "handle_request.h"
+#include "ca_server.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "ca_server.h"
 #include <utils.h>
 #include <limits.h>
+#include <assert.h>
 
 #define BUNDLE_ID "com.lctech.crtman"
 
@@ -77,37 +79,167 @@ static const char *kTestCsrPem =
     "e96rqeKoMMdpNHD6TpUY9Q==\n"
     "-----END CERTIFICATE REQUEST-----";
 
-int main(int argc, char **argv)
+CA_STATUS ca_server_tests(CADaemon *ca, const char *db_dir)
 {
-
-    char *prefs_path = NULL;
-    char *app_support_path = NULL;
-    CADaemon *ca = NULL;
-    CA_STATUS status = CA_OK;
-    FILE *fp = NULL;
-    FILE *fs = NULL;
-    char *cert_pem = NULL;
+    CA_STATUS status;
+    char *issued_cert_pem = NULL;
+    uint32_t issued_cert_pem_length = 0;
     char *serial = NULL;
+    uint32_t serial_length = 0;
     char *crl_pem = NULL;
+    uint32_t crl_pem_length = 0;
     char issued_path[PATH_MAX];
     int written = 0;
-    char *PEM = NULL;
+    char *ca_cert_pem= NULL;
+    uint32_t ca_cert_pem_length = 0;
+
+    // 3) Get the CA cert and print it
+    status = ca_get_ca_cert(ca, &ca_cert_pem, &ca_cert_pem_length);
+    EXIT_IF_ERR(status, "ca_get_ca_cert failed: %d\n", status);
+    EXIT_IF(strlen(ca_cert_pem) != ca_cert_pem_length, status, CA_ERR_INTERNAL, "ca_cert_pem_length incorrect");
+
+    printf("✅ ca_get_ca_cert: CA certificate: .\n");
+    printf("%s\n", ca_cert_pem);
+
+    // 4) Ask the CA to sign a hard-coded cert
+    status = ca_issue_cert(ca, kTestCsrPem, 365, "server", &issued_cert_pem, &issued_cert_pem_length, &serial, &serial_length);
+    EXIT_IF_ERR(status, "ca_issue_cert failed: %d", status);
+    EXIT_IF(strlen(issued_cert_pem) != issued_cert_pem_length, status, CA_ERR_INTERNAL, "issued_cert_pem_length incorrect");
+    EXIT_IF(strlen(serial) != serial_length, status, CA_ERR_INTERNAL, "serial_length incorrect api returned: %u, strlen(serial) = %lu", serial_length, strlen(serial));
+
+    printf("✅ ca_issue_cert. \n");
+    printf("Issued Certificate (serial %s):\n%s\n", serial, issued_cert_pem);
+
+    // Write the cert to a file to be verified
+    snprintf(issued_path, sizeof(issued_path), "%s/%s", db_dir, "issued.cert.pem");
+
+    FILE *f = fopen(issued_path, "w");
+    EXIT_IF(f == NULL, status, CA_ERR_INTERNAL, "Failed to open cert path");
+
+    // 4. Write the cert
+    written = fprintf(f, "%s", issued_cert_pem);
+    EXIT_IF(written == 0, status, CA_ERR_INTERNAL, "Failed to write issued cert to file");
+
+    // 5. Revoke the cert
+    status = ca_revoke_cert(ca, serial, 1);
+    EXIT_IF_ERR(status, "ca_revoke_cert failed: %d", status);
+    printf("✅ ca_revoke_cert \n");
+
+    // 6. Get the CRL list
+    status = ca_get_crl(ca, &crl_pem, &crl_pem_length);
+    EXIT_IF_ERR(status, "ca_get_crl failed: %d", status);
+    EXIT_IF(strlen(crl_pem) != crl_pem_length, status, CA_ERR_INTERNAL, "crl_pem_length incorrect");
+
+    printf("✅ ca_get_crl\n");
+    printf("CRL:\n %s\n", crl_pem);
+
+exit:
+    FREE_IF_NOT_NULL(ca_cert_pem, free);
+    FREE_IF_NOT_NULL(crl_pem, free);
+    FREE_IF_NOT_NULL(issued_cert_pem, free);
+    FREE_IF_NOT_NULL(serial, free);
+
+    return status;
+}
+
+// Enumeration of supported commands. COPY for code cleanliness
+typedef enum {
+    CMD_GET_CA_CERT,
+    CMD_ISSUE_CERT,
+    CMD_REVOKE_CERT,
+    CMD_GET_CRL,
+    CMD_UNKNOWN
+} Command;
+
+// JSON Definitions for the requests
+const char *kGetCaCert = "{\"cmd\":\"GetCACert\"}";
+
+const char *kRevokeCert = "{\"cmd\":\"RevokeCert\","
+                          "\"serial\":\"01A3\","
+                          "\"reason_code\":1"
+                          "}";
+
+const char *kGetCRL = "{\"cmd\":\"GetCRL\"}";
+
+// Helper for the handle_request_tests
+static CA_STATUS get_test_request_json(Command cmd, char *json_command, uint32_t command_size_max)
+{
+    CA_STATUS status = CA_OK;
+
+    switch (cmd)
+    {
+        case CMD_GET_CA_CERT:
+            strlcpy(json_command, kGetCaCert, command_size_max);
+            break;
+        case CMD_ISSUE_CERT:
+            snprintf(json_command, command_size_max,
+                    "{"
+                      "\"cmd\":\"IssueCert\","
+                      "\"csr_pem\":\"%s\","
+                      "\"valid_days\":365,"
+                      "\"profile\":\"server\""
+                    "}",
+                    kTestCsrPem);
+            break;
+        case CMD_REVOKE_CERT:
+            strlcpy(json_command, kRevokeCert, command_size_max);
+            break;
+        case CMD_GET_CRL:
+            strlcpy(json_command, kGetCRL, command_size_max);
+            break;
+        default:
+            status = CA_ERR_INTERNAL;
+    }
+
+    return status;
+}
+
+CA_STATUS handle_request_tests(CADaemon *ca)
+{
+    char request[1024];
+    uint32_t max_length = 1024;
+    char *response = NULL;
+    CA_STATUS status = CA_OK;
+
+    status = get_test_request_json(CMD_GET_CA_CERT, request, max_length);
+    EXIT_IF_ERR(status, "Failed to get request json");
+
+    status = handle_request(ca, request, &response);
+    if (status != CA_OK && response != NULL)
+    {
+        printf("Error response from handle_request: %s\n", response);
+    }
+    EXIT_IF_ERR(status, "Failed to get response for CMD_GET_CA_CERT %d", status);
+
+    printf("Response to CMD_GET_CA_CERT:\n%s\n", response);
+
+exit:
+
+    return status;
+}
+
+int main(int argc, char **argv)
+{
+    CA_STATUS status = CA_OK;
+    CADaemon *ca;
+    char *prefs_path = NULL;
+    char *app_support_path = NULL;
+    FILE *fp = NULL;
+    FILE *fs = NULL;
 
     if (argc < 4)
     {
         printf("Usage: ./unittests <DB_DIR> <CA_LABEL> <VALIDITY>\n");
         return 0;
     }
+
     /*
-     * TEST)
-     *  build_preferences_path()
-     *  build_app_support_path()
+     * Tests to check that daemon can create and modify files in the desired dir
      */
     // 1) build_preferences_path
     prefs_path = build_preferences_path(BUNDLE_ID);
     // 2) build_app_support_path
     app_support_path = build_app_support_path(BUNDLE_ID);
-
     // 3) check that the files are openable
     fp = fopen(prefs_path, "w");
     EXIT_IF(fp == NULL, status, CA_ERR_INTERNAL, "Failed to open cert path");
@@ -118,12 +250,6 @@ int main(int argc, char **argv)
     DEBUG_LOG("Preferences path: %s\n", prefs_path);
     DEBUG_LOG("Application Support path: %s\n", app_support_path);
 
-    /*
-     * TEST)
-     *  ca_init()
-     *  ca_get_ca_cert()
-     *  ca_shutdown()
-     */
     // 1) Prepare configuration
     CAConfig cfg = {0};
     cfg.db_dir           = argv[1];
@@ -137,51 +263,21 @@ int main(int argc, char **argv)
 
     printf("✅ ca_init: Generated key and CA certificate.\n");
 
-    // 3) Get the CA cert and print it
-    status = ca_get_ca_cert(ca, &PEM);
-    EXIT_IF_ERR(status, "ca_get_ca_cert failed: %d\n", status);
+    /*
+     * TESTS
+     */
 
-    printf("✅ ca_get_ca_cert: CA certificate: .\n");
-    printf("%s\n", PEM);
+    // ca_server.c tests
+    status = ca_server_tests(ca, cfg.db_dir);
+    assert(status == CA_OK);
 
-    // 4) Ask the CA to sign a hard-coded cert
-    status = ca_issue_cert(ca, kTestCsrPem, 365, "server", &cert_pem, &serial);
-    EXIT_IF_ERR(status, "ca_issue_cert failed: %d", status);
-
-    printf("✅ ca_issue_cert. \n");
-    printf("Issued Certificate (serial %s):\n%s\n", serial, cert_pem);
-
-    // Write the cert to a file to be verified
-    snprintf(issued_path, sizeof(issued_path), "%s/%s", cfg.db_dir, "issued.cert.pem");
-
-    FILE *f = fopen(issued_path, "w");
-    EXIT_IF(f == NULL, status, CA_ERR_INTERNAL, "Failed to open cert path");
-
-    // 4. Write the cert
-    written = fprintf(f, "%s", cert_pem);
-    EXIT_IF(written == 0, status, CA_ERR_INTERNAL, "Failed to write issued cert to file");
-
-    // 5. Revoke the cert
-    status = ca_revoke_cert(ca, serial, 1);
-    EXIT_IF_ERR(status, "ca_revoke_cert failed: %d", status);
-    printf("✅ ca_revoke_cert \n");
-
-    // 6. Get the CRL list
-    status = ca_get_crl(ca, &crl_pem);
-    EXIT_IF_ERR(status, "ca_get_crl failed: %d", status);
-
-    printf("✅ ca_get_crl\n");
-    printf("CRL:\n %s\n", crl_pem);
-
-    // TODO:
-    // handle_command_tests();
+    // handle_request.c tests
+    status = handle_request_tests(ca);
+    assert(status == CA_OK);
 
     // 7) Shutdown the CA
     ca_shutdown(&ca);
-
 exit:
-
-    FREE_IF_NOT_NULL(PEM, free);
 
     if (fp != NULL)
     {
