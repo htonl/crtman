@@ -360,6 +360,9 @@ CA_STATUS ca_revoke_cert(CADaemon *ca, const char *serial, int reason_code) {
     // Get current UTC time as YYYYMMDDHHMMSSZ
     char datestr[32];
     time_t now = time(NULL);
+    bool found_issued = false;
+    bool found_revoked = false;
+    char buf[1024];
     struct tm gm;
 
     REQUIRE_ACTION(ca != NULL, return CA_ERR_BAD_PARAM;);
@@ -374,6 +377,27 @@ CA_STATUS ca_revoke_cert(CADaemon *ca, const char *serial, int reason_code) {
     }
     if (strftime(datestr, sizeof(datestr), "%Y%m%d%H%M%SZ", &gm) == 0) {
         return CA_ERR_INTERNAL;
+    }
+
+    // Verify this CA actually issued this cert
+    fseek(ca->index_fd, 0, SEEK_SET);
+    while (fgets(buf, sizeof(buf), ca->index_fd)) {
+        if (buf[0] == 'V' && strstr(buf, serial)) {
+            found_issued = true;
+        } else if (buf[0] == 'R' && strstr(buf, serial)) {
+            found_revoked = true;
+        }
+        if (found_issued && found_revoked) break;
+    }
+    if (!found_issued) {
+        DEBUG_LOG("RevokeCert: serial %s not found in index", serial);
+        ca_unlock_index_file(ca);
+        return CA_ERR_BAD_PARAM;
+    }
+    if (found_revoked) {
+        DEBUG_LOG("RevokeCert: serial %s already revoked", serial);
+        ca_unlock_index_file(ca);
+        return CA_ERR_BAD_PARAM;
     }
 
     // Append: R<TAB><date><TAB><reason><TAB><serial>\n
@@ -459,6 +483,9 @@ static ASN1_INTEGER *ca_next_serial(CADaemon *ca)
 
     // Grab the index file lock
     ca_lock_index_file(ca);
+
+    // Go to the beginning of the file
+    fseek(ca->serial_fd, 0, SEEK_SET);
 
     if (fscanf(ca->serial_fd, "%lx", &s) != 1)
     {

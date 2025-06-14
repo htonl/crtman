@@ -155,7 +155,7 @@ typedef enum {
 const char *kGetCaCert = "{\"cmd\":\"GetCACert\"}";
 
 const char *kRevokeCert = "{\"cmd\":\"RevokeCert\","
-                          "\"serial\":\"01A3\","
+                          "\"serial\":\"01\","
                           "\"reason_code\":1"
                           "}";
 
@@ -196,22 +196,30 @@ static CA_STATUS get_test_request_json(Command cmd, char *json_command, uint32_t
 
 CA_STATUS handle_request_tests(CADaemon *ca)
 {
-    char request[1024];
-    uint32_t max_length = 1024;
+    char request[2048];
+    uint32_t max_length = 2048;
     char *response = NULL;
+    Command cmd = CMD_GET_CA_CERT;
     CA_STATUS status = CA_OK;
 
-    status = get_test_request_json(CMD_GET_CA_CERT, request, max_length);
-    EXIT_IF_ERR(status, "Failed to get request json");
-
-    status = handle_request(ca, request, &response);
-    if (status != CA_OK && response != NULL)
+    for (cmd = CMD_GET_CA_CERT; cmd < CMD_UNKNOWN; cmd++)
     {
-        printf("Error response from handle_request: %s\n", response);
-    }
-    EXIT_IF_ERR(status, "Failed to get response for CMD_GET_CA_CERT %d", status);
+        status = get_test_request_json(cmd, request, max_length);
+        DEBUG_LOG("Sending request JSON:\n%s", request);
+        EXIT_IF_ERR(status, "Failed to get request json");
 
-    printf("Response to CMD_GET_CA_CERT:\n%s\n", response);
+        status = handle_request(ca, request, &response);
+        if (status != CA_OK && response != NULL)
+        {
+            printf("Error response from handle_request: %s\n", response);
+        }
+        EXIT_IF_ERR(status, "Failed to get response for cmd:%d, status:  %d", cmd, status);
+
+        printf("Response to command:%d\n%s\n", cmd, response);
+
+        free(response);
+        response = NULL;
+    }
 
 exit:
 
