@@ -60,7 +60,7 @@ static const char *kTestPrivateKeyPem =
  *   -out test.csr.pem \
  *   -subj "/C=US/ST=State/L=City/O=Org/OU=OrgUnit/CN=unittest.example"
  */
-static const char *kTestCsrPem =
+static const char *kCaTestCsrPem =
     "-----BEGIN CERTIFICATE REQUEST-----\n"
     "MIICrDCCAZQCAQAwZzELMAkGA1UEBhMCVVMxDjAMBgNVBAgMBVN0YXRlMQ0wCwYD\n"
     "VQQHDARDaXR5MQwwCgYDVQQKDANPcmcxEDAOBgNVBAsMB09yZ1VuaXQxGTAXBgNV\n"
@@ -77,6 +77,57 @@ static const char *kTestCsrPem =
     "egvpoIumD808u3DtFKTCaXZGJqANTPt5PynrE0V/M88PczJfL995JDriXiwwcN9G\n"
     "IXbHfuR62ugAorjJxe4oX5cDDBiuILHi8dPLejy9b8uL+5zn3YaI4WAfYDXuY9Nr\n"
     "e96rqeKoMMdpNHD6TpUY9Q==\n"
+    "-----END CERTIFICATE REQUEST-----";
+
+/*
+ * Private key for second Csr test
+ *
+ * -----BEGIN PRIVATE KEY-----
+ *  MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCivfAmA5FcN77A
+ *  lQDNhSe8ONym3VaST5osNuMNjQ5WvUG0SqX1B0oarllEVIlQ32U9Ewsb2pM/TaCi
+ *  DyvQML4qrGRmd5XXzw5SzAtBMniwRscMfhZoZllzif3GVGNo+ww53ezehlVbSmoU
+ *  xaJB77fdNursFn/oo+Je12Mq+aGG0jog1yPY09dkBZ3R3NYoT7RZsTIzrSrUUVWl
+ *  AbNMiBDUNmkjYW9PDl61lOxqZg5yAkjh4BU3KfTBmdUvZJ/fWKp6pMsgDvptH2Lp
+ *  ep0xmWogD1Ls2JzDgrIB36Hskiu45PGgRJiDgV/dpyHtWfen+fc8M0clDzXIBPec
+ *  /D7mMQNvAgMBAAECggEAItIeHJwd0Yvx6hXXnqHTfy/xcligidyzYat6yG76du+2
+ *  q8NfH/7nya6tVfP6j43FBRzafyK059INwS8a0khjoBDTyKLkslDQwUF8VP5eGWWD
+ *  eHZQCBWCJTkMzg9HV/KDSqxj3rcCc26IJRqmXZJTlmcGO+6Sfq32JRHT26GfAJAK
+ *  WAgSbK6HMRGfgfdspw5j5arRjYE8Bi4mBo73e8TvO0sXOSa115810O2zQUDs6vVJ
+ *  Jce/XiaujRY6DKyPvHypb+wa6YtaQ/URPfNK8ApoozNOxQrXLh6xkCag9s/s71Rr
+ *  N+b8ouATsC/7sE7X+mdAFOBLeAEJxx0Ip0ZR5wzkUQKBgQDQH/O+6EoOW3s3EFLH
+ *  ylZDiThvfUG1BMcituTdwjVWpsm99uHpF2tF4LkgzyEnx1m/O39nUHhIDq3YOU6S
+ *  K+JEdtB2YapbhBEZgY4HAbkAp8YRAaaTeBvMvRmR4Xw7WbIqrpHUUMVp+ax0PqYD
+ *  JYoIkQrgOSyK5Nq7Cdf4PKVo3wKBgQDILXsiCNRGCsfJfB7jl77yt23d3O97Cu8N
+ *  ci3r3RJYnHjdFROQuhifn/g1QcqW3sIhll5lAVtIIPdXUrCIDeph842XMba2yLe6
+ *  yW5Khsn0EfzRkAe9yXI9E1T4sclirfMryVa+k+ZecKHfYU3xQWBgzhyl09LJ2O+L
+ *  8FBHn4RncQKBgHO2YBlzIsFqwU2zCKNF7sIrx7HMzTxshJ7bWtGkiW083At++MlU
+ *  mPLH54XDQ2bPYil9Ve9GASnm52bBLdr9BRcVi/9Ve5bYDX3F1wY0QfyISwnnhgqV
+ *  i7dAJ7hAyoZg7zrlxfRqV+f8xZH3xusW8vCiW46gmxA5/xZgea/tX/W3AoGBAJT7
+ *  hJEoERSwIVGL11F8NtleO57MOFBTKufO+u54cpcQncOtVAp69qiW3pyEgssWr1Vg
+ *  HJEAGXftUSjkmg4ojTCpm8/TaDFR4axbDoLZHqVQXeF6WMifjS53nN4bM88Ft932
+ *  02CzotjW6yLdwKy2A40I2blxlYg0tNRp3tXvmxOBAoGBALJS9XiEyzdna6OciDYi
+ *  uYJD/89c8fkBmG22DoV7rL7YaRM4aRNyfjaDJ9nxXJqO9CxyVQpzwH76kCZngHFC
+ *  o6CepfrPixdU/mQhX2ZT9H7yuCJdr+1EUEh+1vZMMeZSwTuxr6aWJReeF2YIoeZK
+ *  /UY0ufDv4ioqIfl6jcWULLJZ
+ *  -----END PRIVATE KEY-----
+ */
+static const char *kRequestTestCsrPem =
+    "-----BEGIN CERTIFICATE REQUEST-----\n"
+    "MIICrDCCAZQCAQAwZzELMAkGA1UEBhMCVVMxDjAMBgNVBAgMBVN0YXRlMQ0wCwYD\n"
+    "VQQHDARDaXR5MQwwCgYDVQQKDANPcmcxEDAOBgNVBAsMB09yZ1VuaXQxGTAXBgNV\n"
+    "BAMMEHVuaXR0ZXN0LmV4YW1wbGUwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK\n"
+    "AoIBAQCivfAmA5FcN77AlQDNhSe8ONym3VaST5osNuMNjQ5WvUG0SqX1B0oarllE\n"
+    "VIlQ32U9Ewsb2pM/TaCiDyvQML4qrGRmd5XXzw5SzAtBMniwRscMfhZoZllzif3G\n"
+    "VGNo+ww53ezehlVbSmoUxaJB77fdNursFn/oo+Je12Mq+aGG0jog1yPY09dkBZ3R\n"
+    "3NYoT7RZsTIzrSrUUVWlAbNMiBDUNmkjYW9PDl61lOxqZg5yAkjh4BU3KfTBmdUv\n"
+    "ZJ/fWKp6pMsgDvptH2Lpep0xmWogD1Ls2JzDgrIB36Hskiu45PGgRJiDgV/dpyHt\n"
+    "Wfen+fc8M0clDzXIBPec/D7mMQNvAgMBAAGgADANBgkqhkiG9w0BAQsFAAOCAQEA\n"
+    "S5w5qsZTS8p9UK7nlJVdEM2KPOhVzK1gaokuVq23m6BtLDDSxD/UiVPWddunnZ0/\n"
+    "/jEXVNhyksI8956hiYCplvGVbRF/UUuzhmBZfNh0+GJImZCGXE8kIb+McJiRevjS\n"
+    "6X77I7p/ZNak5GGtZzjDYQuJarZbTK83GiQNI+mQj202pPpUpz/ok7xZlOyYLnsr\n"
+    "NgYxpXmoDAb3g/987a/jDCMZoiw5KisTm8844SzuS3H8vSbiXLVW6Ojpg95o+8l/\n"
+    "dM1KNY9Q9A4s7YWj1IDQLjejzPgo6bq4gDRDTLXCM6YxoZdt71k9TOcmn3e12d57\n"
+    "Xk9GTWtxj4H0Pgx7fXpv3A==\n"
     "-----END CERTIFICATE REQUEST-----";
 
 CA_STATUS ca_server_tests(CADaemon *ca, const char *db_dir)
@@ -102,7 +153,7 @@ CA_STATUS ca_server_tests(CADaemon *ca, const char *db_dir)
     printf("%s\n", ca_cert_pem);
 
     // 4) Ask the CA to sign a hard-coded cert
-    status = ca_issue_cert(ca, kTestCsrPem, 365, "server", &issued_cert_pem, &issued_cert_pem_length, &serial, &serial_length);
+    status = ca_issue_cert(ca, kCaTestCsrPem, 365, "server", &issued_cert_pem, &issued_cert_pem_length, &serial, &serial_length);
     EXIT_IF_ERR(status, "ca_issue_cert failed: %d", status);
     EXIT_IF(strlen(issued_cert_pem) != issued_cert_pem_length, status, CA_ERR_INTERNAL, "issued_cert_pem_length incorrect");
     EXIT_IF(strlen(serial) != serial_length, status, CA_ERR_INTERNAL, "serial_length incorrect api returned: %u, strlen(serial) = %lu", serial_length, strlen(serial));
@@ -155,7 +206,7 @@ typedef enum {
 const char *kGetCaCert = "{\"cmd\":\"GetCACert\"}";
 
 const char *kRevokeCert = "{\"cmd\":\"RevokeCert\","
-                          "\"serial\":\"01\","
+                          "\"serial\":\"02\","
                           "\"reason_code\":1"
                           "}";
 
@@ -179,7 +230,7 @@ static CA_STATUS get_test_request_json(Command cmd, char *json_command, uint32_t
                       "\"valid_days\":365,"
                       "\"profile\":\"server\""
                     "}",
-                    kTestCsrPem);
+                    kRequestTestCsrPem);
             break;
         case CMD_REVOKE_CERT:
             strlcpy(json_command, kRevokeCert, command_size_max);

@@ -362,7 +362,7 @@ CA_STATUS ca_revoke_cert(CADaemon *ca, const char *serial, int reason_code) {
     time_t now = time(NULL);
     bool found_issued = false;
     bool found_revoked = false;
-    char buf[1024];
+    char line[1024];
     struct tm gm;
 
     REQUIRE_ACTION(ca != NULL, return CA_ERR_BAD_PARAM;);
@@ -379,16 +379,45 @@ CA_STATUS ca_revoke_cert(CADaemon *ca, const char *serial, int reason_code) {
         return CA_ERR_INTERNAL;
     }
 
-    // Verify this CA actually issued this cert
+    // 2) Scan index.txt for issuance (V) and existing revocation (R)
     fseek(ca->index_fd, 0, SEEK_SET);
-    while (fgets(buf, sizeof(buf), ca->index_fd)) {
-        if (buf[0] == 'V' && strstr(buf, serial)) {
+
+    while (fgets(line, sizeof(line), ca->index_fd))
+    {
+        // Only care about V (valid) or R (revoked) lines
+        if (line[0] != 'V' && line[0] != 'R') {
+            continue;
+        }
+        // Find the end of the timestamp (Z)
+        char *z = strchr(line, 'Z');
+        if (!z) continue;
+
+        // Advance past 'Z' and any spaces/tabs/newlines
+        char *p = z + 1;
+        while (*p == '\t' || *p == ' ' || *p == '\r' || *p == '\n') {
+            p++;
+        }
+        // p now at start of the serial
+        char *start = p;
+        // Find end of serial
+        while (*p && *p != '\t' && *p != ' ' && *p != '\r' && *p != '\n') {
+            p++;
+        }
+        // Temporarily NUL-terminate
+        char saved = *p;
+        *p = '\0';
+
+        if (line[0] == 'V' && strcmp(start, serial) == 0) {
             found_issued = true;
-        } else if (buf[0] == 'R' && strstr(buf, serial)) {
+        } else if (line[0] == 'R' && strcmp(start, serial) == 0) {
             found_revoked = true;
         }
+
+        // Restore
+        *p = saved;
         if (found_issued && found_revoked) break;
     }
+
     if (!found_issued) {
         DEBUG_LOG("RevokeCert: serial %s not found in index", serial);
         ca_unlock_index_file(ca);

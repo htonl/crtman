@@ -65,6 +65,16 @@
  *
  */
 
+// Eerror enum
+typedef enum {
+    ERR_CMD_GET_CA_CERT_FAILED = 101,
+    ERR_CMD_ISSUE_CERT_MISSING_PARAM = 102,
+    ERR_CMD_ISSUE_CERT_FAILED = 103,
+    ERR_CMD_REVOKE_CERT_MISSING_PARAM = 104,
+    ERR_CMD_REVOKE_CERT_FAILED = 105,
+    ERR_CMD_GET_CRL_FAILED = 105,
+} cmd_err_t;
+
 /*
  * @brief Dispatch the incoming requests of the daemon
  *
