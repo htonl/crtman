@@ -355,8 +355,8 @@ exit:
     return status;
 }
 
-CA_STATUS ca_revoke_cert(CADaemon *ca, const char *serial, int reason_code) {
-
+static CA_STATUS ca_revoke_cert_via_file(CADaemon *ca, const char *serial, int reason_code)
+{
     // Get current UTC time as YYYYMMDDHHMMSSZ
     char datestr[32];
     time_t now = time(NULL);
@@ -439,6 +439,15 @@ CA_STATUS ca_revoke_cert(CADaemon *ca, const char *serial, int reason_code) {
     ca_unlock_index_file(ca);
 
     return CA_OK;
+}
+
+CA_STATUS ca_revoke_cert(CADaemon *ca, const char *serial, int reason_code)
+{
+    REQUIRE_ACTION(ca != NULL, return CA_ERR_BAD_PARAM;);
+    REQUIRE_ACTION(serial != NULL, return CA_ERR_BAD_PARAM;);
+    REQUIRE_ACTION(ca->index_fd != NULL, return CA_ERR_INTERNAL;);
+
+    return ca_revoke_cert_via_file(ca, serial, reason_code);
 }
 
 CA_STATUS ca_get_crl(CADaemon *ca, char **crl_pem_out, uint32_t *crl_length)
