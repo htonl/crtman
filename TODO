@@ -1,7 +1,7 @@
-1. Add request parsing code
-    1a. Add request parsing API's to handle the JSON from web requests - COMPLETED
-    1b. Add unit tests for all parsing - IN PROGRESS
-        1ba. Fix broken revoke test to expect failure - TODO
+1. Add request parsing code - DONE
+    1a. Add request parsing API's to handle the JSON from web requests - DONE 
+    1b. Add unit tests for all parsing - DONE 
+        1ba. Fix broken revoke test to expect failure - DONE 
 2. Make it a daemon - NOT STARTED
     1a. Add socket handling for receiving requests
     1b. Create a client tool to call it (static library with driver program)
