@@ -19,6 +19,8 @@
 #include "handle_request.h"
 #include "ca_server.h"
 
+#define MAX_LINE_LENGTH 1024
+
 // Global CA context
 static CADaemon *g_ca = NULL;
 
@@ -51,33 +53,76 @@ static void handle_client(xpc_connection_t conn) {
 int main(int argc, const char *argv[]) {
     char *prefs_path = NULL;
     char *app_support_path = NULL;
-    FILE *fp;
-    FILE *fs;
-    CA_STATUS status = CA_OK;
+    FILE *fp = NULL;
+    FILE *fs = NULL;
+    FILE * cfg_file = NULL;
+    CAConfig cfg = {0};
 
     prefs_path = build_preferences_path(BUNDLE_ID);
     app_support_path = build_app_support_path(BUNDLE_ID);
 
     fp = fopen(prefs_path, "r");
-    EXIT_IF(fp == NULL, status, CA_ERR_INTERNAL, "Failed to open cert path");
-
-    fs = fopen(app_support_path, "r");
-    EXIT_IF(fs == NULL, status, CA_ERR_INTERNAL, "Failed to open cert path");
 
     DEBUG_LOG("Preferences path: %s\n", prefs_path);
     DEBUG_LOG("Application Support path: %s\n", app_support_path);
 
-    // TODO: Use the prefs files for configuration
+    // Use App Support path first
+    if ((fs = fopen(app_support_path, "r")) != NULL)
+    {
+       cfg_file = fs;
+    }
+    // Fallback to preferences path
+    else if ((fp = fopen(prefs_path, "r")) != NULL)
+    {
+       cfg_file = fp;
+    }
 
-    // 1) Initialize your CA
-    // TODO: Handle provision_key = false
-    CAConfig cfg = {
-        .db_dir           = "./db",      // adjust as needed
-        .ca_label         = BUNDLE_ID,
-        .default_validity = 365 * 24 * 3600,
-        .provision_key    = true
-    };
+    if (cfg_file != NULL)
+    {
+        char db[MAX_LINE_LENGTH];
+        if ((fgets(db, MAX_LINE_LENGTH, cfg_file)) != NULL)
+        {
+            cfg.db_dir = db;
+        }
 
+        char label[MAX_LINE_LENGTH];
+        if ((fgets(label, MAX_LINE_LENGTH, cfg_file)) != NULL)
+        {
+            cfg.ca_label = label;
+        }
+
+        char validity_str[MAX_LINE_LENGTH];
+        char *endptr;
+        if ((fgets(validity_str, MAX_LINE_LENGTH, cfg_file)) != NULL)
+        {
+            cfg.default_validity = strtoul(validity_str, &endptr, 10);
+        }
+
+        char provision[MAX_LINE_LENGTH];
+        if ((fgets(provision, MAX_LINE_LENGTH, cfg_file)) != NULL)
+        {
+            if (strncmp(provision, "true", 4) == 0)
+            {
+                cfg.provision_key = true;
+            }
+            else
+            {
+                cfg.provision_key = false;
+            }
+        }
+
+    }
+    // Defaults
+    else
+    {
+        // Default config if no file provided
+        cfg.db_dir = "./db";
+        cfg.ca_label = BUNDLE_ID;
+        cfg.default_validity = 365 * 24 * 3600;
+        cfg.provision_key = true;
+    }
+
+    // 1) Initialize the CA
     if (ca_init(&cfg, &g_ca) != CA_OK) {
         fprintf(stderr, "Failed to initialize CA\n");
         return 1;
@@ -103,11 +148,10 @@ int main(int argc, const char *argv[]) {
     // 4) Run the dispatch loop
     dispatch_main();
 
-exit:
     FREE_IF_NOT_NULL(prefs_path, free);
     FREE_IF_NOT_NULL(app_support_path, free);
 
-    ca_shutdown(g_ca);
+    ca_shutdown(&g_ca);
     return 0;
 }
 /*

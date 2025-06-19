@@ -2,8 +2,8 @@
     1a. Add request parsing API's to handle the JSON from web requests - DONE 
     1b. Add unit tests for all parsing - DONE 
         1ba. Fix broken revoke test to expect failure - DONE 
-2. Make it a daemon - NOT STARTED
-    1a. Add socket handling for receiving requests
+2. Make it a daemon - In Progress
+    1a. Add XPC handling for receiving requests - DONE
     1b. Create a client tool to call it (static library with driver program)
-    1c. Wrap communications in TLS/SSL
-    1d. XPC API for local (admin)  interaction?
+    1c. Add auth to files?
+    1d. Test everything

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- your Mach service name -->
+  <key>Label</key>
+  <string>com.lctech.crtman</string>
+
+  <!-- full path to the daemon binary (we’ll install it here) -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/$(USER)/Library/LaunchAgents/daemon_xpc</string>
+  </array>
+
+  <!-- start on load and keep running -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <!-- optional: log stdout/stderr -->
+  <key>StandardOutPath</key>
+  <string>/tmp/crtman.out</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/crtman.err</string>
+</dict>
+</plist>

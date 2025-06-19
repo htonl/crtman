@@ -18,7 +18,12 @@ TEST_SRC  := ca_server.c unittests.c shared/utils.c handle_request.c vendor/cJSO
 TEST_OBJ  := $(TEST_SRC:.c=.o)
 TEST_TARGET := unittests
 
-.PHONY: all clean
+# Installation constants
+DAEMON_BIN := crtman
+PLIST := com.lctech.crtman.plist
+LAUNCH_DIR := $(HOME)/Library/LaunchAgents
+
+.PHONY: all clean install-launch clean-launch
 
 all: $(TARGET)
 
@@ -33,6 +38,10 @@ clean:
 	rm -f $(OBJ) $(TARGET) $(TEST_OBJ) $(TEST_TARGET)
 	rm -rf db/
 
+install:
+
+rundaemon:
+
 boringssl:
 	cd vendor/boringssl && \
 	mkdir build && cd build && \
@@ -46,3 +55,21 @@ $(TEST_TARGET): $(TEST_OBJ)
 
 runtests:
 	python3 unit_test.py
+
+install-launch:
+	@echo "Installing CA daemon to $(LAUNCH_DIR)..."
+	mkdir -p "$(LAUNCH_DIR)"
+	# Copy the daemon binary
+	install -m 755 "$(DAEMON_BIN)" "$(LAUNCH_DIR)/$(DAEMON_BIN)"
+	# Copy the plist
+	install -m 644 "$(PLIST)"  "$(LAUNCH_DIR)/$(PLIST)"
+	# Unload any existing job, then load the new one
+	-@launchctl unload "$(LAUNCH_DIR)/$(PLIST)" 2>/dev/null || true
+	@launchctl load   "$(LAUNCH_DIR)/$(PLIST)"
+	@echo "Done. Use 'launchctl list | grep com.example.myCA.daemon' to verify."
+
+clean-launch:
+	@echo "Unloading and removing CA daemon..."
+	-@launchctl unload "$(LAUNCH_DIR)/$(PLIST)" 2>/dev/null || true
+	rm -f "$(LAUNCH_DIR)/$(PLIST)" "$(LAUNCH_DIR)/$(DAEMON_BIN)"
+	@echo "Removed."
