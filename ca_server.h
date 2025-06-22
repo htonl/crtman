@@ -52,8 +52,6 @@ CA_STATUS ca_init(const CAConfig *cfg, CADaemon **out);
  */
 void ca_shutdown(CADaemon **ca);
 
-// Handlers for each command
-
 /*
  * @brief Get the CA public certificate
  *
