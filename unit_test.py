@@ -29,7 +29,7 @@ class TestCADaemon(unittest.TestCase):
     DB_DIR = Path('db')
     CA_LABEL = 'com.example.myCA'
     VALIDITY = '31536000'
-    TEST_BINARY = './unittests'
+    TEST_BINARY = './test'
 
     def run_cmd(self, cmd, check=True):
         """Run a shell command, return CompletedProcess with stdout+stderr text."""

@@ -5,12 +5,12 @@
 <dict>
   <!-- your Mach service name -->
   <key>Label</key>
-  <string>com.lctech.crtman</string>
+  <string>com.nordsec.crtman</string>
 
   <!-- full path to the daemon binary (we’ll install it here) -->
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/$(USER)/Library/LaunchAgents/daemon_xpc</string>
+    <string>/Users/$(USER)/Library/LaunchAgents/crtman</string>
   </array>
 
   <!-- start on load and keep running -->
@@ -18,6 +18,13 @@
   <true/>
   <key>KeepAlive</key>
   <true/>
+
+  <key>MachServices</key>
+  <dict>
+  <!-- must match the name in xpc_connection_create_mach_service() -->
+    <key>com.nordsec.crtman</key>
+    <true/>
+  </dict>
 
   <!-- optional: log stdout/stderr -->
   <key>StandardOutPath</key>

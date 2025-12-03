@@ -16,16 +16,22 @@ TARGET    := crtman
 # Unit test executable
 TEST_SRC  := ca_server.c unittests.c shared/utils.c handle_request.c vendor/cJSON/cJSON.c
 TEST_OBJ  := $(TEST_SRC:.c=.o)
-TEST_TARGET := unittests
+TEST_TARGET := test
+
+CLIENT_SRC := ca_client.c shared/utils.c vendor/cJSON/cJSON.c client_test.c
+CLIENT_OBJ := $(CLIENT_SRC:.c=.o)
+CLIENT_TARGET := crtman-cli
 
 # Installation constants
 DAEMON_BIN := crtman
-PLIST := com.lctech.crtman.plist
+PLIST := com.nordsec.crtman.plist
 LAUNCH_DIR := $(HOME)/Library/LaunchAgents
 
 .PHONY: all clean install-launch clean-launch
 
-all: $(TARGET)
+all: boringssl crtman crtman-cli
+
+crtman: $(TARGET)
 
 $(TARGET): $(OBJ)
 	$(CC) -o $@ $^ $(LDFLAGS)
@@ -35,25 +41,21 @@ $(TARGET): $(OBJ)
 	$(CC) $(CFLAGS) -g -c $< -o $@
 
 clean:
-	rm -f $(OBJ) $(TARGET) $(TEST_OBJ) $(TEST_TARGET)
+	rm -f $(OBJ) $(TARGET) $(TEST_OBJ) $(TEST_TARGET) $(CLIENT_OBJ) $(CLIENT_TARGET)
 	rm -rf db/
-
-install:
-
-rundaemon:
 
 boringssl:
 	cd vendor/boringssl && \
-	mkdir build && cd build && \
+	mkdir -p build && cd build && \
 	cmake -GNinja .. && \
 	ninja
 
-unittest: $(TEST_TARGET)
+test: $(TEST_TARGET)
 
 $(TEST_TARGET): $(TEST_OBJ)
 	$(CC) -o $@ $^ $(LDFLAGS)
 
-runtests:
+runtest:
 	python3 unit_test.py
 
 install-launch:
@@ -73,3 +75,9 @@ clean-launch:
 	-@launchctl unload "$(LAUNCH_DIR)/$(PLIST)" 2>/dev/null || true
 	rm -f "$(LAUNCH_DIR)/$(PLIST)" "$(LAUNCH_DIR)/$(DAEMON_BIN)"
 	@echo "Removed."
+
+crtman-cli: $(CLIENT_TARGET)
+
+$(CLIENT_TARGET): $(CLIENT_OBJ)
+	$(CC) -o $@ $^ $(LDFLAGS)
+

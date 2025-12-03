@@ -19,7 +19,7 @@
  * Return a heap-allocated string containing:
  *   <homeDir>/Library/Preferences/<bundleID>.plist
  *
- * bundleID must be a null-terminated C string (e.g. "com.lctech.crtman").
+ * bundleID must be a null-terminated C string (e.g. "com.nordsec.crtman").
  *
  * The caller is responsible for free()ing the returned pointer.
  * On error, returns NULL.
@@ -98,7 +98,7 @@ char *build_preferences_path(const char *bundleID)
  * Return a heap-allocated string containing:
  *   <homeDir>/Library/Application Support/<bundleID>.plist
  *
- * bundleID must be a null-terminated C string (e.g. "com.lctech.crtman").
+ * bundleID must be a null-terminated C string (e.g. "com.nordsec.crtman").
  *
  * The caller is responsible for free()ing the returned pointer.
  * On error, returns NULL.

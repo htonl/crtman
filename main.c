@@ -10,7 +10,7 @@
 #include "ca_server.h"
 #include <utils.h>
 
-#define BUNDLE_ID "com.lctech.crtman"
+#define BUNDLE_ID "com.nordsec.crtman"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,7 +50,8 @@ static void handle_client(xpc_connection_t conn) {
     xpc_connection_resume(conn);
 }
 
-int main(int argc, const char *argv[]) {
+int main(void)
+{
     char *prefs_path = NULL;
     char *app_support_path = NULL;
     FILE *fp = NULL;
