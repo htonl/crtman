@@ -754,7 +754,8 @@ static CA_STATUS generate_self_signed_cert(CADaemon *ca, X509 **cert)
 
     evp_pub = EVP_PKEY_new();
     EXIT_IF(!EVP_PKEY_assign_RSA(evp_pub, rsa), status, CA_ERR_INTERNAL, "Failed to convert rsa to der");
-
+    // EVP_PKEY_assign_RSA takes ownership of rsa, so NULL it to prevent double-free
+    rsa = NULL;
 
     int res = X509_set_pubkey(crt, evp_pub);
     EXIT_IF(res == 0, status, CA_ERR_INTERNAL, "Failed to set pub key in crt");

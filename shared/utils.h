@@ -109,6 +109,14 @@ char *build_preferences_path(const char *bundleID);
 char *build_app_support_path(const char *bundleID);
 
 /*
+ * @brief Build the path to the daemon data directory and create it if needed
+ *
+ * @param [in] bundleID bundle id of the daemon
+ * @return heap-allocated path string, or NULL on error. Caller must free().
+ */
+char *build_data_dir_path(const char *bundleID);
+
+/*
  * Pretty-print a byte buffer in hex with offsets.
  *
  * @param buf     Pointer to the byte buffer.

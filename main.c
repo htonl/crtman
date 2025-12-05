@@ -54,6 +54,7 @@ int main(void)
 {
     char *prefs_path = NULL;
     char *app_support_path = NULL;
+    char *data_dir_path = NULL;
     FILE *fp = NULL;
     FILE *fs = NULL;
     FILE * cfg_file = NULL;
@@ -61,11 +62,13 @@ int main(void)
 
     prefs_path = build_preferences_path(BUNDLE_ID);
     app_support_path = build_app_support_path(BUNDLE_ID);
+    data_dir_path = build_data_dir_path(BUNDLE_ID);
 
     fp = fopen(prefs_path, "r");
 
     DEBUG_LOG("Preferences path: %s\n", prefs_path);
     DEBUG_LOG("Application Support path: %s\n", app_support_path);
+    DEBUG_LOG("Data directory path: %s\n", data_dir_path);
 
     // Use App Support path first
     if ((fs = fopen(app_support_path, "r")) != NULL)
@@ -117,7 +120,7 @@ int main(void)
     else
     {
         // Default config if no file provided
-        cfg.db_dir = "./db";
+        cfg.db_dir = data_dir_path;
         cfg.ca_label = BUNDLE_ID;
         cfg.default_validity = 365 * 24 * 3600;
         cfg.provision_key = true;
@@ -151,6 +154,7 @@ int main(void)
 
     FREE_IF_NOT_NULL(prefs_path, free);
     FREE_IF_NOT_NULL(app_support_path, free);
+    FREE_IF_NOT_NULL(data_dir_path, free);
 
     ca_shutdown(&g_ca);
     return 0;

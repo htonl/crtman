@@ -63,12 +63,13 @@ install-launch:
 	mkdir -p "$(LAUNCH_DIR)"
 	# Copy the daemon binary
 	install -m 755 "$(DAEMON_BIN)" "$(LAUNCH_DIR)/$(DAEMON_BIN)"
-	# Copy the plist
-	install -m 644 "$(PLIST)"  "$(LAUNCH_DIR)/$(PLIST)"
+	# Copy the plist, substituting the daemon path
+	sed 's|__DAEMON_PATH__|$(LAUNCH_DIR)/$(DAEMON_BIN)|g' "$(PLIST)" > "$(LAUNCH_DIR)/$(PLIST)"
+	chmod 644 "$(LAUNCH_DIR)/$(PLIST)"
 	# Unload any existing job, then load the new one
 	-@launchctl unload "$(LAUNCH_DIR)/$(PLIST)" 2>/dev/null || true
 	@launchctl load   "$(LAUNCH_DIR)/$(PLIST)"
-	@echo "Done. Use 'launchctl list | grep com.example.myCA.daemon' to verify."
+	@echo "Done. Use 'launchctl list | grep com.nordsec.crtman' to verify."
 
 clean-launch:
 	@echo "Unloading and removing CA daemon..."

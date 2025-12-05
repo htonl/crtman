@@ -7,10 +7,10 @@
   <key>Label</key>
   <string>com.nordsec.crtman</string>
 
-  <!-- full path to the daemon binary (we’ll install it here) -->
+  <!-- full path to the daemon binary (we'll install it here) -->
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/$(USER)/Library/LaunchAgents/crtman</string>
+    <string>__DAEMON_PATH__</string>
   </array>
 
   <!-- start on load and keep running -->
