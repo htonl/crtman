@@ -8,6 +8,12 @@ CC        := clang
 CFLAGS    := -Ishared -I$(BORINGSSL)/include -I$(CJSON) -std=c11 -Wall -Wextra -DDEBUG
 LDFLAGS   := $(BORINGSSL)/build/libcrypto.a -framework Security -framework CoreFoundation
 
+# Enable Secure Enclave for EC key storage (requires code signing)
+# Usage: make USE_SEP=1 crtman
+ifdef USE_SEP
+CFLAGS += -DUSE_SECURE_ENCLAVE
+endif
+
 # Main executable, not a daemon yet. WIP is from unittest target
 SRC       := ca_server.c main.c shared/utils.c handle_request.c vendor/cJSON/cJSON.c
 OBJ       := $(SRC:.c=.o)

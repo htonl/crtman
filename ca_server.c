@@ -17,6 +17,8 @@
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 #include <openssl/err.h>
+#include <openssl/ec.h>
+#include <openssl/ecdsa.h>
 #include <Security/Security.h>
 #include <pthread.h>
 
@@ -263,18 +265,18 @@ CA_STATUS ca_issue_cert(CADaemon *ca,
     ret = X509_set_pubkey(new_cert, csr_pubkey);
     EXIT_IF(!ret, status, CA_ERR_INTERNAL, "Failed to X509_set_pubkey");
 
-    // 8) signatureAlgorithm for TBSCertificate + outer
+    // 8) signatureAlgorithm for TBSCertificate + outer - ECDSA with SHA-256
     sig_alg = X509_ALGOR_new();
     EXIT_IF(!sig_alg, status, CA_ERR_INTERNAL, "Failed to X509_ALGOR_new");
 
     X509_ALGOR_set0(sig_alg,
-                    OBJ_nid2obj(NID_sha256WithRSAEncryption),
-                    V_ASN1_NULL, NULL);
+                    OBJ_nid2obj(NID_ecdsa_with_SHA256),
+                    V_ASN1_UNDEF, NULL);
 
     ret = X509_set1_signature_algo(new_cert, sig_alg);
     EXIT_IF(!ret, status, CA_ERR_INTERNAL, "Failed to X509_set1_signature_algo");
 
-    // We can free our local sig_alg; it was dup’d internally
+    // We can free our local sig_alg; it was dup'd internally
     X509_ALGOR_free(sig_alg);
     sig_alg = NULL;
 
@@ -282,16 +284,16 @@ CA_STATUS ca_issue_cert(CADaemon *ca,
     tbs_len = i2d_re_X509_tbs(new_cert, &tbs_der);
     EXIT_IF((tbs_len <= 0 || !tbs_der), status, CA_ERR_INTERNAL, "Failed to i2d_re_X509_tbs");
 
-    // 10) Let SEP sign the TBSCertificate DER
+    // 10) Let SEP/Keychain sign the TBSCertificate DER with ECDSA
     tbs_data = CFDataCreate(NULL, tbs_der, tbs_len);
     EXIT_IF(!tbs_data, status, CA_ERR_INTERNAL, "Failed to CFDataCreate");
 
     sig_data = SecKeyCreateSignature(ca->ca_pk,
-                                     kSecKeyAlgorithmRSASignatureMessagePKCS1v15SHA256,
+                                     kSecKeyAlgorithmECDSASignatureMessageX962SHA256,
                                      tbs_data,
                                      &cfErr);
 
-    EXIT_IF(!sig_data, status, CA_ERR_INTERNAL, "Failed to SecKeyCreateSignature");
+    EXIT_IF(!sig_data, status, CA_ERR_INTERNAL, "Failed to SecKeyCreateSignature (ECDSA)");
 
     sig_bytes = CFDataGetBytePtr(sig_data);
     sig_len   = CFDataGetLength(sig_data);
@@ -628,20 +630,23 @@ static CA_STATUS ca_generate_keypair(CADaemon *ca)
     // Check input
     REQUIRE_ACTION(ca != NULL, return CA_ERR_BAD_PARAM;);
 
-    // Build the attr params
-    key_size_num = CFNumberCreate(NULL, kCFNumberIntType, (int[]){3072});
+    // Build the attr params - EC P-256 for Secure Enclave compatibility
+    key_size_num = CFNumberCreate(NULL, kCFNumberIntType, (int[]){256});
     REQUIRE_ACTION(key_size_num != NULL, return CA_ERR_MEMORY;);
 
     label = CFStringCreateWithCString(NULL, ca->cfg->ca_label, kCFStringEncodingUTF8);
     EXIT_IF(label == NULL, status, CA_ERR_MEMORY, "Failed to CFStringCreateWithCString");
 
-    // Private key attributes
+    // Private key attributes - store in Secure Enclave
     priv_attrs = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
     CFDictionaryAddValue(priv_attrs, kSecAttrIsPermanent, kCFBooleanTrue);
+#ifdef USE_SECURE_ENCLAVE
+    CFDictionaryAddValue(priv_attrs, kSecAttrTokenID, kSecAttrTokenIDSecureEnclave);
+#endif
 
-    // Public attributes
+    // Key attributes - EC P-256 (secp256r1)
     attributes = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-    CFDictionaryAddValue(attributes, kSecAttrKeyType, kSecAttrKeyTypeRSA);
+    CFDictionaryAddValue(attributes, kSecAttrKeyType, kSecAttrKeyTypeECSECPrimeRandom);
     CFDictionaryAddValue(attributes, kSecAttrKeySizeInBits, key_size_num);
     CFDictionaryAddValue(attributes, kSecAttrIsPermanent, kCFBooleanTrue);
     CFDictionaryAddValue(attributes, kSecAttrLabel, label);
@@ -649,7 +654,17 @@ static CA_STATUS ca_generate_keypair(CADaemon *ca)
 
     // Create the key
     ca->ca_pk = SecKeyCreateRandomKey(attributes, &cf_err);
-    EXIT_IF(ca->ca_pk == NULL, status, CA_ERR_INTERNAL, "Failed to generate SEP key");
+    if (ca->ca_pk == NULL && cf_err != NULL) {
+        CFStringRef desc = CFErrorCopyDescription(cf_err);
+        if (desc) {
+            char buf[256];
+            CFStringGetCString(desc, buf, sizeof(buf), kCFStringEncodingUTF8);
+            DEBUG_LOG("SecKeyCreateRandomKey failed: %s", buf);
+            CFRelease(desc);
+        }
+        CFRelease(cf_err);
+    }
+    EXIT_IF(ca->ca_pk == NULL, status, CA_ERR_INTERNAL, "Failed to generate EC key");
 
     // 2. Build self-signed CA certificate
     status = generate_self_signed_cert(ca, &local_cert);
@@ -709,8 +724,8 @@ static CA_STATUS generate_self_signed_cert(CADaemon *ca, X509 **cert)
     int tbs_len = 0;
     CA_STATUS status = CA_OK;
     CFDataRef sig = NULL;
-    RSA *rsa = NULL;
-    ASN1_BIT_STRING *sig_bs = NULL;
+    EC_KEY *ec_key = NULL;
+    EC_GROUP *ec_group = NULL;
 
     // Check input
     REQUIRE_ACTION(ca != NULL, return CA_ERR_BAD_PARAM;);
@@ -739,35 +754,43 @@ static CA_STATUS generate_self_signed_cert(CADaemon *ca, X509 **cert)
     X509_set_subject_name(crt, name);
     X509_set_issuer_name(crt, name);
 
-    // Public key from SEP
+    // Public key from SEP/Keychain - EC P-256
     pub_ref = SecKeyCopyPublicKey(ca->ca_pk);
     EXIT_IF(pub_ref == NULL, status, CA_ERR_MEMORY, "Failed to get pubref");
 
     pub_data = SecKeyCopyExternalRepresentation(pub_ref, &cf_err);
     EXIT_IF(pub_data == NULL, status, CA_ERR_INTERNAL, "Failed to copy pub key ref");
 
+    // Security.framework returns EC public key in X9.63 uncompressed format: 04 || x || y
     const unsigned char *p = CFDataGetBytePtr(pub_data);
     size_t len = CFDataGetLength(pub_data);
 
-    rsa = d2i_RSAPublicKey(NULL, &p, len);
-    EXIT_IF(rsa == NULL, status, CA_ERR_INTERNAL, "Failed to get rsa from sep");
+    // Create EC_KEY with P-256 curve
+    ec_group = EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
+    EXIT_IF(ec_group == NULL, status, CA_ERR_INTERNAL, "Failed to create EC group");
+
+    ec_key = EC_KEY_new();
+    EXIT_IF(ec_key == NULL, status, CA_ERR_INTERNAL, "Failed to create EC_KEY");
+    EXIT_IF(!EC_KEY_set_group(ec_key, ec_group), status, CA_ERR_INTERNAL, "Failed to set EC group");
+
+    // Parse X9.63 format public key
+    EXIT_IF(!o2i_ECPublicKey(&ec_key, &p, len), status, CA_ERR_INTERNAL, "Failed to parse EC public key");
 
     evp_pub = EVP_PKEY_new();
-    EXIT_IF(!EVP_PKEY_assign_RSA(evp_pub, rsa), status, CA_ERR_INTERNAL, "Failed to convert rsa to der");
-    // EVP_PKEY_assign_RSA takes ownership of rsa, so NULL it to prevent double-free
-    rsa = NULL;
+    EXIT_IF(!EVP_PKEY_assign_EC_KEY(evp_pub, ec_key), status, CA_ERR_INTERNAL, "Failed to assign EC key");
+    // EVP_PKEY_assign_EC_KEY takes ownership
+    ec_key = NULL;
 
     int res = X509_set_pubkey(crt, evp_pub);
     EXIT_IF(res == 0, status, CA_ERR_INTERNAL, "Failed to set pub key in crt");
-    EXIT_IF(res == 0, status, CA_ERR_INTERNAL, "Failed to fake sign the pub cert");
 
-    // X509 now owns this
+    // X509 now has a copy
     EVP_PKEY_free(evp_pub);
     evp_pub = NULL;
 
-    // 2) Create your AlgorithmIdentifier for SHA256‐RSA:
+    // 2) Create AlgorithmIdentifier for ECDSA with SHA-256
     sig_alg = X509_ALGOR_new();
-    X509_ALGOR_set0(sig_alg, OBJ_nid2obj(NID_sha256WithRSAEncryption), V_ASN1_NULL, NULL);
+    X509_ALGOR_set0(sig_alg, OBJ_nid2obj(NID_ecdsa_with_SHA256), V_ASN1_UNDEF, NULL);
 
     // 3) Inject into both TBSCertificate and outer signatureAlgorithm:
     EXIT_IF(!X509_set1_signature_algo(crt, sig_alg), status, CA_ERR_INTERNAL, "Failed to set signature algorithm in X509.");
@@ -778,24 +801,23 @@ static CA_STATUS generate_self_signed_cert(CADaemon *ca, X509 **cert)
     EXIT_IF(tbs_der == NULL, status, CA_ERR_INTERNAL, "tbs_der is NULL");
 
     data = CFDataCreate(NULL, tbs_der, tbs_len);
+    // Use ECDSA signature algorithm
     sig = SecKeyCreateSignature(ca->ca_pk,
-        kSecKeyAlgorithmRSASignatureMessagePKCS1v15SHA256,
+        kSecKeyAlgorithmECDSASignatureMessageX962SHA256,
         data, &cf_err);
-    EXIT_IF(sig == NULL, status, CA_ERR_INTERNAL, "Faield to create signature on tbs");
+    EXIT_IF(sig == NULL, status, CA_ERR_INTERNAL, "Failed to create ECDSA signature on tbs");
 
     sig_bytes = CFDataGetBytePtr(sig);
     sig_len = (int)CFDataGetLength(sig);
 
     // 6) Inject the signature bytes:
-    if (!X509_set1_signature_value(crt, sig_bytes, sig_len)) {
-        // handle error
-    }
+    EXIT_IF(!X509_set1_signature_value(crt, sig_bytes, sig_len), status, CA_ERR_INTERNAL, "Failed to set signature value");
 
-    // 7) Now you have a fully‐populated X509.
-    //    Serialize with i2d_X509 or write PEM.
+    // 7) Verify the cert can be serialized
     unsigned char *out_der = NULL;
     int out_len = i2d_X509(crt, &out_der);
     EXIT_IF(out_len <= 0, status, CA_ERR_INTERNAL, "Failed to i2d_X509");
+    OPENSSL_free(out_der);
 
     *cert = crt;
 
@@ -803,13 +825,14 @@ exit:
 
     FREE_IF_NOT_NULL(data, CFRelease);
     FREE_IF_NOT_NULL(sig, CFRelease);
-    FREE_IF_NOT_NULL(rsa, RSA_free);
+    FREE_IF_NOT_NULL(ec_key, EC_KEY_free);
+    FREE_IF_NOT_NULL(ec_group, EC_GROUP_free);
     FREE_IF_NOT_NULL(serial, ASN1_INTEGER_free);
     FREE_IF_NOT_NULL(name, X509_NAME_free);
     FREE_IF_NOT_NULL(tbs_der, OPENSSL_free);
     FREE_IF_NOT_NULL(pub_ref, CFRelease);
     FREE_IF_NOT_NULL(pub_data, CFRelease);
-    FREE_IF_NOT_NULL(sig_bs, ASN1_BIT_STRING_free);
+    FREE_IF_NOT_NULL(evp_pub, EVP_PKEY_free);
     FREE_IF_NOT_NULL(sig_alg, X509_ALGOR_free);
 
     if (status != CA_OK)
@@ -1029,9 +1052,9 @@ extern CA_STATUS ca_build_crl(CADaemon *ca, char **crl_pem_out, uint32_t *crl_pe
     crl = ca_build_crl_from_index(ca);
     EXIT_IF(crl == NULL, status, CA_ERR_INTERNAL, "Failed ca_build_crl_from_index");
 
-    // 1.5) Give the crl a bogus signature since OSSL makes us have this to DER encode it
+    // 1.5) Set signature algorithm for TBS - ECDSA with SHA-256
     X509_ALGOR *tbs_alg = X509_ALGOR_new();
-    X509_ALGOR_set0(tbs_alg, OBJ_nid2obj(NID_sha256WithRSAEncryption), V_ASN1_NULL, NULL);
+    X509_ALGOR_set0(tbs_alg, OBJ_nid2obj(NID_ecdsa_with_SHA256), V_ASN1_UNDEF, NULL);
 
     // Duplicate into the TBSCertList and outer fields:
     X509_CRL_set1_signature_algo(crl, tbs_alg);
@@ -1043,23 +1066,23 @@ extern CA_STATUS ca_build_crl(CADaemon *ca, char **crl_pem_out, uint32_t *crl_pe
     EXIT_IF(tbs_len <= 0, status, CA_ERR_INTERNAL, "Failed to i2d_re_X509_crl_tbs len check");
     EXIT_IF(tbs_der == NULL, status, CA_ERR_INTERNAL, "Failed to i2d_re_X509_crl_tbs null check");
 
-    // 3) Sign via Secure Enclave
+    // 3) Sign via Secure Enclave/Keychain with ECDSA
     tbs_data = CFDataCreate(NULL, tbs_der, tbs_len);
     sig_data = SecKeyCreateSignature(ca->ca_pk,
-        kSecKeyAlgorithmRSASignatureMessagePKCS1v15SHA256,
+        kSecKeyAlgorithmECDSASignatureMessageX962SHA256,
         tbs_data, &cfErr);
-    EXIT_IF(!sig_data, status, CA_ERR_INTERNAL, "Failed to SecKeyCreateSignature");
+    EXIT_IF(!sig_data, status, CA_ERR_INTERNAL, "Failed to SecKeyCreateSignature (ECDSA)");
 
     sig_bytes = CFDataGetBytePtr(sig_data);
     sig_len   = CFDataGetLength(sig_data);
 
-    // 4) Inject signatureAlgorithm + signatureValue
+    // 4) Inject signatureAlgorithm + signatureValue - ECDSA with SHA-256
     sig_alg = X509_ALGOR_new();
     EXIT_IF(!sig_alg, status, CA_ERR_INTERNAL, "Failed to allocate x509");
 
     X509_ALGOR_set0(sig_alg,
-        OBJ_nid2obj(NID_sha256WithRSAEncryption),
-        V_ASN1_NULL, NULL);
+        OBJ_nid2obj(NID_ecdsa_with_SHA256),
+        V_ASN1_UNDEF, NULL);
     // This duplicates into both tbs and outer fields
     EXIT_IF(!X509_CRL_set1_signature_algo(crl, sig_alg), status, CA_ERR_INTERNAL, "Failed to X509_CRL_set1_signature_algo");
     // And attach the raw signature bytes
