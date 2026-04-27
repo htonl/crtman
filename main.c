@@ -10,7 +10,7 @@
 #include "ca_server.h"
 #include <utils.h>
 
-#define BUNDLE_ID "com.nordsec.crtman"
+#define BUNDLE_ID "com.norsec.crtman"
 
 #include <stdio.h>
 #include <stdlib.h>

@@ -36,7 +36,7 @@ The following items should be addressed before using this in production:
 - **Current status**: Without Developer ID signing, keys are stored in the Keychain (SEP-encrypted at rest, but key material in RAM during signing).
 
 ### Access Control
-- **No Mach service access control**: Any process running as the current user can connect to `com.nordsec.crtman` and issue/revoke certificates. Consider adding `xpc_connection_get_audit_token()` checks to restrict which applications can call the CA.
+- **No Mach service access control**: Any process running as the current user can connect to `com.norsec.crtman` and issue/revoke certificates. Consider adding `xpc_connection_get_audit_token()` checks to restrict which applications can call the CA.
 
 ### Certificate Management
 - **Serial number reuse risk**: The serial file allows serial reuse if corrupted/reset. CAs should never reuse serial numbers per RFC 5280.

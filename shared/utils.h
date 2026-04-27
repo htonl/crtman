@@ -13,12 +13,19 @@
 /* Some debugging macros */
 #if DEBUG
 
-#define LOG(x)        \
-    do                \
-    {                 \
-        printf x;     \
-        printf("\n"); \
-    } while (0)
+#include <stdarg.h>
+static inline void _crtman_log(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+}
+
+/* LOG is a dev-only debug macro. Output goes to stderr so that tools
+ * which pipe the stdout of linked consumers (e.g. norsec-crtman-cli,
+ * which emits PEM on stdout) are not contaminated by log chatter. */
+#define LOG(x) _crtman_log x
 
 #define REQUIRE_ACTION_LOG(...) LOG((__VA_ARGS__))
 #define EXIT_IF_ERR_LOG(...) LOG((__VA_ARGS__))

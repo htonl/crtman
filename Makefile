@@ -28,14 +28,19 @@ CLIENT_SRC := ca_client.c shared/utils.c vendor/cJSON/cJSON.c client_test.c
 CLIENT_OBJ := $(CLIENT_SRC:.c=.o)
 CLIENT_TARGET := crtman-cli
 
+# NORSEC provisioning CLI: thin shell wrapper over ca_client
+NORSEC_CLI_SRC := ca_client.c shared/utils.c vendor/cJSON/cJSON.c norsec-crtman-cli.c
+NORSEC_CLI_OBJ := $(NORSEC_CLI_SRC:.c=.o)
+NORSEC_CLI_TARGET := norsec-crtman-cli
+
 # Installation constants
 DAEMON_BIN := crtman
-PLIST := com.nordsec.crtman.plist
+PLIST := com.norsec.crtman.plist
 LAUNCH_DIR := $(HOME)/Library/LaunchAgents
 
 .PHONY: all clean install-launch clean-launch
 
-all: boringssl crtman crtman-cli
+all: boringssl crtman crtman-cli norsec-crtman-cli
 
 crtman: $(TARGET)
 
@@ -47,7 +52,7 @@ $(TARGET): $(OBJ)
 	$(CC) $(CFLAGS) -g -c $< -o $@
 
 clean:
-	rm -f $(OBJ) $(TARGET) $(TEST_OBJ) $(TEST_TARGET) $(CLIENT_OBJ) $(CLIENT_TARGET)
+	rm -f $(OBJ) $(TARGET) $(TEST_OBJ) $(TEST_TARGET) $(CLIENT_OBJ) $(CLIENT_TARGET) $(NORSEC_CLI_OBJ) $(NORSEC_CLI_TARGET)
 	rm -rf db/
 
 boringssl:
@@ -75,7 +80,7 @@ install-launch:
 	# Unload any existing job, then load the new one
 	-@launchctl unload "$(LAUNCH_DIR)/$(PLIST)" 2>/dev/null || true
 	@launchctl load   "$(LAUNCH_DIR)/$(PLIST)"
-	@echo "Done. Use 'launchctl list | grep com.nordsec.crtman' to verify."
+	@echo "Done. Use 'launchctl list | grep com.norsec.crtman' to verify."
 
 clean-launch:
 	@echo "Unloading and removing CA daemon..."
@@ -88,3 +93,7 @@ crtman-cli: $(CLIENT_TARGET)
 $(CLIENT_TARGET): $(CLIENT_OBJ)
 	$(CC) -o $@ $^ $(LDFLAGS)
 
+norsec-crtman-cli: $(NORSEC_CLI_TARGET)
+
+$(NORSEC_CLI_TARGET): $(NORSEC_CLI_OBJ)
+	$(CC) -o $@ $^ $(LDFLAGS)

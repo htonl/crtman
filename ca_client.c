@@ -7,7 +7,7 @@
 #include <cJSON.h>
 
 // Mach service name must match the daemon's
-#define CA_MACH_SERVICE "com.nordsec.crtman"
+#define CA_MACH_SERVICE "com.norsec.crtman"
 
 struct CAClient
 {

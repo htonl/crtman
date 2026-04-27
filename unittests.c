@@ -13,7 +13,7 @@
 #include <limits.h>
 #include <assert.h>
 
-#define BUNDLE_ID "com.nordsec.crtman"
+#define BUNDLE_ID "com.norsec.crtman"
 
 /*
  * Test key generated via
