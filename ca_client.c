@@ -22,6 +22,7 @@ static CA_STATUS ca_client_send(CAClient *client, cJSON *req_obj, cJSON **resp_o
     const char *resp_str = NULL;
     xpc_object_t reply = NULL;
     xpc_object_t msg = NULL;
+    cJSON *root = NULL;
     LOG(("ca_client_send Called"));
 
     REQUIRE_ACTION(client != NULL, return CA_ERR_BAD_PARAM;);
@@ -49,7 +50,7 @@ static CA_STATUS ca_client_send(CAClient *client, cJSON *req_obj, cJSON **resp_o
     EXIT_IF(!resp_str, status, CA_ERR_INTERNAL, "Failed to get response from daemon");
 
     // Parse JSON response
-    cJSON *root = cJSON_Parse(resp_str);
+    root = cJSON_Parse(resp_str);
     EXIT_IF(!root, status, CA_ERR_INTERNAL, "Failed to parse response JSON");
 
     // Check status
@@ -66,7 +67,7 @@ exit:
     }
 
     *resp_obj = root;
-    return CA_OK;
+    return status;
 }
 
 CAClient *ca_client_init(void)
@@ -113,6 +114,14 @@ CA_STATUS ca_client_get_ca_cert(CAClient *client,
                                 char **pem_out,
                                 uint32_t *pem_length)
 {
+    return ca_client_get_ca_cert_for_identity(client, NULL, pem_out, pem_length);
+}
+
+CA_STATUS ca_client_get_ca_cert_for_identity(CAClient *client,
+                                const char *identity,
+                                char **pem_out,
+                                uint32_t *pem_length)
+{
     CA_STATUS status = CA_OK;
     const char *pem_string = NULL;
     uint32_t pem_len = 0;
@@ -129,6 +138,10 @@ CA_STATUS ca_client_get_ca_cert(CAClient *client,
     REQUIRE_ACTION(req != NULL, return CA_ERR_MEMORY;);
 
     cJSON_AddStringToObject(req, "cmd", "GetCACert");
+    if (identity != NULL)
+    {
+        cJSON_AddStringToObject(req, "identity", identity);
+    }
 
     resp = NULL;
 
@@ -158,6 +171,93 @@ exit:
     return status;
 }
 
+CA_STATUS ca_client_add_signing_identity(CAClient *client,
+                                         const char *identity,
+                                         char **pem_out,
+                                         uint32_t *pem_length)
+{
+    return ca_client_add_signing_identity_signed_by(client, identity, NULL, pem_out, pem_length);
+}
+
+CA_STATUS ca_client_add_signing_identity_signed_by(CAClient *client,
+                                         const char *identity,
+                                         const char *signed_by,
+                                         char **pem_out,
+                                         uint32_t *pem_length)
+{
+    if (!client || !identity || !pem_out || !pem_length)
+    {
+        return CA_ERR_BAD_PARAM;
+    }
+
+    cJSON *req = cJSON_CreateObject();
+    cJSON_AddStringToObject(req, "cmd", "AddSigningIdentity");
+    cJSON_AddStringToObject(req, "identity", identity);
+    if (signed_by != NULL)
+    {
+        cJSON_AddStringToObject(req, "signed_by", signed_by);
+    }
+
+    cJSON *resp = NULL;
+    CA_STATUS st = ca_client_send(client, req, &resp);
+    cJSON_Delete(req);
+    if (st != CA_OK)
+    {
+        return st;
+    }
+
+    cJSON *jpem = cJSON_GetObjectItem(resp, "ca_cert_pem");
+    if (!cJSON_IsString(jpem))
+    {
+        cJSON_Delete(resp);
+        return CA_ERR_INTERNAL;
+    }
+
+    uint32_t len = (uint32_t)strlen(jpem->valuestring);
+    char *buf = malloc(len + 1);
+    if (buf == NULL)
+    {
+        cJSON_Delete(resp);
+        return CA_ERR_MEMORY;
+    }
+    memcpy(buf, jpem->valuestring, len + 1);
+
+    *pem_out = buf;
+    *pem_length = len;
+    cJSON_Delete(resp);
+    return CA_OK;
+}
+
+CA_STATUS ca_client_list_signing_identities(CAClient *client, char **json_out)
+{
+    if (!client || !json_out)
+    {
+        return CA_ERR_BAD_PARAM;
+    }
+
+    cJSON *req = cJSON_CreateObject();
+    cJSON_AddStringToObject(req, "cmd", "ListSigningIdentities");
+
+    cJSON *resp = NULL;
+    CA_STATUS st = ca_client_send(client, req, &resp);
+    cJSON_Delete(req);
+    if (st != CA_OK)
+    {
+        return st;
+    }
+
+    cJSON *items = cJSON_GetObjectItem(resp, "identities");
+    if (!cJSON_IsArray(items))
+    {
+        cJSON_Delete(resp);
+        return CA_ERR_INTERNAL;
+    }
+
+    *json_out = cJSON_Print(items);
+    cJSON_Delete(resp);
+    return *json_out ? CA_OK : CA_ERR_MEMORY;
+}
+
 CA_STATUS ca_client_issue_cert(CAClient *client,
                                const char *csr_pem,
                                unsigned    valid_days,
@@ -167,7 +267,22 @@ CA_STATUS ca_client_issue_cert(CAClient *client,
                                char      **serial_out,
                                uint32_t   *serial_length)
 {
-    if (!client || !csr_pem || !profile || !cert_pem_out || !serial_out)
+    return ca_client_issue_cert_for_identity(client, NULL, csr_pem, valid_days, profile,
+                                             cert_pem_out, cert_pem_length,
+                                             serial_out, serial_length);
+}
+
+CA_STATUS ca_client_issue_cert_for_identity(CAClient *client,
+                               const char *identity,
+                               const char *csr_pem,
+                               unsigned    valid_days,
+                               const char *profile,
+                               char      **cert_pem_out,
+                               uint32_t   *cert_pem_length,
+                               char      **serial_out,
+                               uint32_t   *serial_length)
+{
+    if (!client || !csr_pem || !profile || !cert_pem_out || !cert_pem_length || !serial_out || !serial_length)
     {
         return CA_ERR_BAD_PARAM;
     }
@@ -177,6 +292,10 @@ CA_STATUS ca_client_issue_cert(CAClient *client,
     cJSON_AddStringToObject(req, "csr_pem", csr_pem);
     cJSON_AddNumberToObject(req, "valid_days", valid_days);
     cJSON_AddStringToObject(req, "profile", profile);
+    if (identity != NULL)
+    {
+        cJSON_AddStringToObject(req, "identity", identity);
+    }
 
     cJSON *resp = NULL;
     CA_STATUS st = ca_client_send(client, req, &resp);
@@ -222,6 +341,14 @@ CA_STATUS ca_client_revoke_cert(CAClient *client,
                                 const char *serial,
                                 int reason_code)
 {
+    return ca_client_revoke_cert_for_identity(client, NULL, serial, reason_code);
+}
+
+CA_STATUS ca_client_revoke_cert_for_identity(CAClient *client,
+                                const char *identity,
+                                const char *serial,
+                                int reason_code)
+{
     if (!client || !serial)
     {
         return CA_ERR_BAD_PARAM;
@@ -231,6 +358,10 @@ CA_STATUS ca_client_revoke_cert(CAClient *client,
     cJSON_AddStringToObject(req, "cmd", "RevokeCert");
     cJSON_AddStringToObject(req, "serial", serial);
     cJSON_AddNumberToObject(req, "reason_code", reason_code);
+    if (identity != NULL)
+    {
+        cJSON_AddStringToObject(req, "identity", identity);
+    }
 
     cJSON *resp = NULL;
     CA_STATUS st = ca_client_send(client, req, &resp);
@@ -245,6 +376,13 @@ CA_STATUS ca_client_revoke_cert(CAClient *client,
 CA_STATUS ca_client_get_crl(CAClient *client,
                             char **crl_pem_out,
                             uint32_t *crl_pem_length) {
+    return ca_client_get_crl_for_identity(client, NULL, crl_pem_out, crl_pem_length);
+}
+
+CA_STATUS ca_client_get_crl_for_identity(CAClient *client,
+                            const char *identity,
+                            char **crl_pem_out,
+                            uint32_t *crl_pem_length) {
     if (!client || !crl_pem_out || !crl_pem_length)
     {
         return CA_ERR_BAD_PARAM;
@@ -252,6 +390,10 @@ CA_STATUS ca_client_get_crl(CAClient *client,
 
     cJSON *req = cJSON_CreateObject();
     cJSON_AddStringToObject(req, "cmd", "GetCRL");
+    if (identity != NULL)
+    {
+        cJSON_AddStringToObject(req, "identity", identity);
+    }
 
     cJSON *resp = NULL;
     CA_STATUS st = ca_client_send(client, req, &resp);
@@ -282,4 +424,3 @@ CA_STATUS ca_client_get_crl(CAClient *client,
     cJSON_Delete(resp);
     return CA_OK;
 }
-

@@ -38,9 +38,11 @@ static int usage(FILE *out)
 {
     fprintf(out,
         "usage:\n"
-        "  norsec-crtman-cli get-ca-cert\n"
-        "  norsec-crtman-cli issue-cert [--valid-days N] [--profile NAME]\n"
-        "  norsec-crtman-cli get-crl\n");
+        "  norsec-crtman-cli list-identities\n"
+        "  norsec-crtman-cli add-identity NAME [--signed-by NAME]\n"
+        "  norsec-crtman-cli get-ca-cert [--identity NAME]\n"
+        "  norsec-crtman-cli issue-cert [--identity NAME] [--valid-days N] [--profile NAME]\n"
+        "  norsec-crtman-cli get-crl [--identity NAME]\n");
     return 2;
 }
 
@@ -74,12 +76,47 @@ static char *read_all_stdin(size_t *len_out)
     return buf;
 }
 
-static int cmd_get_ca_cert(void)
+static int cmd_list_identities(void)
+{
+    CAClient *c = ca_client_init();
+    if (!c) { fprintf(stderr, "ca_client_init failed\n"); return 1; }
+    char *json = NULL;
+    CA_STATUS st = ca_client_list_signing_identities(c, &json);
+    if (st != CA_OK) {
+        fprintf(stderr, "list-identities failed: status=%d\n", st);
+        ca_client_shutdown(c);
+        return 1;
+    }
+    fputs(json, stdout);
+    fputc('\n', stdout);
+    free(json);
+    ca_client_shutdown(c);
+    return 0;
+}
+
+static int cmd_add_identity(const char *identity, const char *signed_by)
 {
     CAClient *c = ca_client_init();
     if (!c) { fprintf(stderr, "ca_client_init failed\n"); return 1; }
     char *pem = NULL; uint32_t len = 0;
-    CA_STATUS st = ca_client_get_ca_cert(c, &pem, &len);
+    CA_STATUS st = ca_client_add_signing_identity_signed_by(c, identity, signed_by, &pem, &len);
+    if (st != CA_OK) {
+        fprintf(stderr, "add-identity failed: status=%d\n", st);
+        ca_client_shutdown(c);
+        return 1;
+    }
+    fwrite(pem, 1, len, stdout);
+    free(pem);
+    ca_client_shutdown(c);
+    return 0;
+}
+
+static int cmd_get_ca_cert(const char *identity)
+{
+    CAClient *c = ca_client_init();
+    if (!c) { fprintf(stderr, "ca_client_init failed\n"); return 1; }
+    char *pem = NULL; uint32_t len = 0;
+    CA_STATUS st = ca_client_get_ca_cert_for_identity(c, identity, &pem, &len);
     if (st != CA_OK) {
         fprintf(stderr, "get-ca-cert failed: status=%d\n", st);
         ca_client_shutdown(c);
@@ -91,7 +128,7 @@ static int cmd_get_ca_cert(void)
     return 0;
 }
 
-static int cmd_issue_cert(unsigned valid_days, const char *profile)
+static int cmd_issue_cert(const char *identity, unsigned valid_days, const char *profile)
 {
     size_t in_len = 0;
     char *csr = read_all_stdin(&in_len);
@@ -105,7 +142,7 @@ static int cmd_issue_cert(unsigned valid_days, const char *profile)
     if (!c) { fprintf(stderr, "ca_client_init failed\n"); free(csr); return 1; }
     char *cert_pem = NULL; uint32_t cert_len = 0;
     char *serial = NULL;   uint32_t serial_len = 0;
-    CA_STATUS st = ca_client_issue_cert(c, csr, valid_days, profile,
+    CA_STATUS st = ca_client_issue_cert_for_identity(c, identity, csr, valid_days, profile,
                                         &cert_pem, &cert_len,
                                         &serial, &serial_len);
     free(csr);
@@ -122,12 +159,12 @@ static int cmd_issue_cert(unsigned valid_days, const char *profile)
     return 0;
 }
 
-static int cmd_get_crl(void)
+static int cmd_get_crl(const char *identity)
 {
     CAClient *c = ca_client_init();
     if (!c) { fprintf(stderr, "ca_client_init failed\n"); return 1; }
     char *pem = NULL; uint32_t len = 0;
-    CA_STATUS st = ca_client_get_crl(c, &pem, &len);
+    CA_STATUS st = ca_client_get_crl_for_identity(c, identity, &pem, &len);
     if (st != CA_OK) {
         fprintf(stderr, "get-crl failed: status=%d\n", st);
         ca_client_shutdown(c);
@@ -144,17 +181,54 @@ int main(int argc, char **argv)
     if (argc < 2) return usage(stderr);
     const char *cmd = argv[1];
 
+    if (strcmp(cmd, "list-identities") == 0) {
+        return cmd_list_identities();
+    }
+    if (strcmp(cmd, "add-identity") == 0) {
+        const char *signed_by = NULL;
+        if (argc < 3) return usage(stderr);
+        for (int i = 3; i < argc; i++) {
+            if (strcmp(argv[i], "--signed-by") == 0 && i + 1 < argc) {
+                signed_by = argv[++i];
+            } else {
+                fprintf(stderr, "unknown arg: %s\n", argv[i]);
+                return usage(stderr);
+            }
+        }
+        return cmd_add_identity(argv[2], signed_by);
+    }
     if (strcmp(cmd, "get-ca-cert") == 0) {
-        return cmd_get_ca_cert();
+        const char *identity = NULL;
+        for (int i = 2; i < argc; i++) {
+            if (strcmp(argv[i], "--identity") == 0 && i + 1 < argc) {
+                identity = argv[++i];
+            } else {
+                fprintf(stderr, "unknown arg: %s\n", argv[i]);
+                return usage(stderr);
+            }
+        }
+        return cmd_get_ca_cert(identity);
     }
     if (strcmp(cmd, "get-crl") == 0) {
-        return cmd_get_crl();
+        const char *identity = NULL;
+        for (int i = 2; i < argc; i++) {
+            if (strcmp(argv[i], "--identity") == 0 && i + 1 < argc) {
+                identity = argv[++i];
+            } else {
+                fprintf(stderr, "unknown arg: %s\n", argv[i]);
+                return usage(stderr);
+            }
+        }
+        return cmd_get_crl(identity);
     }
     if (strcmp(cmd, "issue-cert") == 0) {
+        const char *identity = NULL;
         unsigned valid_days = 365;
         const char *profile = "server";
         for (int i = 2; i < argc; i++) {
-            if (strcmp(argv[i], "--valid-days") == 0 && i + 1 < argc) {
+            if (strcmp(argv[i], "--identity") == 0 && i + 1 < argc) {
+                identity = argv[++i];
+            } else if (strcmp(argv[i], "--valid-days") == 0 && i + 1 < argc) {
                 valid_days = (unsigned)strtoul(argv[++i], NULL, 10);
             } else if (strcmp(argv[i], "--profile") == 0 && i + 1 < argc) {
                 profile = argv[++i];
@@ -163,7 +237,7 @@ int main(int argc, char **argv)
                 return usage(stderr);
             }
         }
-        return cmd_issue_cert(valid_days, profile);
+        return cmd_issue_cert(identity, valid_days, profile);
     }
     if (strcmp(cmd, "-h") == 0 || strcmp(cmd, "--help") == 0) {
         usage(stdout);

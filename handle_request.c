@@ -7,6 +7,8 @@
 // Enumeration of supported commands
 typedef enum {
     CMD_GET_CA_CERT,
+    CMD_ADD_SIGNING_IDENTITY,
+    CMD_LIST_SIGNING_IDENTITIES,
     CMD_ISSUE_CERT,
     CMD_REVOKE_CERT,
     CMD_GET_CRL,
@@ -15,6 +17,8 @@ typedef enum {
 
 // Static helpers
 static CA_STATUS handle_get_ca_cert_req(CADaemon *ca, cJSON *req, char **resp);
+static CA_STATUS handle_add_signing_identity_req(CADaemon *ca, cJSON *req, char **resp);
+static CA_STATUS handle_list_signing_identities_req(CADaemon *ca, cJSON *req, char **resp);
 static CA_STATUS handle_issue_cert_req(CADaemon *ca, cJSON *req, char **resp);
 static CA_STATUS handle_revoke_cert_req(CADaemon *ca, cJSON *req, char **resp);
 static CA_STATUS handle_get_crl_req(CADaemon *ca, cJSON *req, char **resp);
@@ -46,6 +50,12 @@ CA_STATUS handle_request(CADaemon *ca, const char *request, char **response)
         case CMD_GET_CA_CERT:
             status = handle_get_ca_cert_req(ca, root, response);
             break;
+        case CMD_ADD_SIGNING_IDENTITY:
+            status = handle_add_signing_identity_req(ca, root, response);
+            break;
+        case CMD_LIST_SIGNING_IDENTITIES:
+            status = handle_list_signing_identities_req(ca, root, response);
+            break;
         case CMD_ISSUE_CERT:
             status = handle_issue_cert_req(ca, root, response);
             break;
@@ -69,6 +79,8 @@ CA_STATUS handle_request(CADaemon *ca, const char *request, char **response)
  */
 static Command parse_command(const char *cmd_str) {
     if (strcmp(cmd_str, "GetCACert") == 0)    return CMD_GET_CA_CERT;
+    if (strcmp(cmd_str, "AddSigningIdentity") == 0) return CMD_ADD_SIGNING_IDENTITY;
+    if (strcmp(cmd_str, "ListSigningIdentities") == 0) return CMD_LIST_SIGNING_IDENTITIES;
     if (strcmp(cmd_str, "IssueCert") == 0)    return CMD_ISSUE_CERT;
     if (strcmp(cmd_str, "RevokeCert") == 0)   return CMD_REVOKE_CERT;
     if (strcmp(cmd_str, "GetCRL") == 0)       return CMD_GET_CRL;
@@ -96,10 +108,11 @@ static char *build_error_json(int error_code, const char *message) {
  */
 static CA_STATUS handle_get_ca_cert_req(CADaemon *ca, cJSON *req, char **resp)
 {
-    (void)req;
+    cJSON *jidentity = cJSON_GetObjectItem(req, "identity");
+    const char *identity = cJSON_IsString(jidentity) ? jidentity->valuestring : NULL;
     char *pem = NULL;
     uint32_t pem_length = 0;
-    CA_STATUS status = ca_get_ca_cert(ca, &pem, &pem_length);
+    CA_STATUS status = ca_get_ca_cert_for_identity(ca, identity, &pem, &pem_length);
     if (status != CA_OK)
     {
         *resp = build_error_json(ERR_CMD_GET_CA_CERT_FAILED, "GetCACert failed");
@@ -109,6 +122,69 @@ static CA_STATUS handle_get_ca_cert_req(CADaemon *ca, cJSON *req, char **resp)
     cJSON_AddStringToObject(root, "status", "OK");
     cJSON_AddStringToObject(root, "ca_cert_pem", pem);
     free(pem);
+    *resp = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    return CA_OK;
+}
+
+static CA_STATUS handle_add_signing_identity_req(CADaemon *ca, cJSON *req, char **resp)
+{
+    cJSON *jidentity = cJSON_GetObjectItem(req, "identity");
+    cJSON *jsigned_by = cJSON_GetObjectItem(req, "signed_by");
+    char *pem = NULL;
+    uint32_t pem_length = 0;
+    const char *signed_by = cJSON_IsString(jsigned_by) ? jsigned_by->valuestring : NULL;
+
+    if (!cJSON_IsString(jidentity)) {
+        *resp = build_error_json(203, "AddSigningIdentity missing identity");
+        return CA_ERR_INTERNAL;
+    }
+
+    CA_STATUS status = ca_add_signing_identity_signed_by(ca, jidentity->valuestring, signed_by, &pem, &pem_length);
+    if (status != CA_OK)
+    {
+        *resp = build_error_json(204, "AddSigningIdentity failed");
+        return status;
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "status", "OK");
+    cJSON_AddStringToObject(root, "identity", jidentity->valuestring);
+    if (signed_by != NULL)
+    {
+        cJSON_AddStringToObject(root, "signed_by", signed_by);
+    }
+    cJSON_AddStringToObject(root, "ca_cert_pem", pem);
+    free(pem);
+    *resp = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    return CA_OK;
+}
+
+static CA_STATUS handle_list_signing_identities_req(CADaemon *ca, cJSON *req, char **resp)
+{
+    (void)req;
+    char *identities_json = NULL;
+    CA_STATUS status = ca_list_signing_identities(ca, &identities_json);
+    if (status != CA_OK)
+    {
+        *resp = build_error_json(205, "ListSigningIdentities failed");
+        return status;
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON *items = cJSON_Parse(identities_json);
+    if (root == NULL || items == NULL)
+    {
+        free(identities_json);
+        cJSON_Delete(root);
+        cJSON_Delete(items);
+        *resp = build_error_json(206, "ListSigningIdentities failed");
+        return CA_ERR_INTERNAL;
+    }
+    cJSON_AddStringToObject(root, "status", "OK");
+    cJSON_AddItemToObject(root, "identities", items);
+    free(identities_json);
     *resp = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     return CA_OK;
@@ -125,6 +201,7 @@ static CA_STATUS handle_issue_cert_req(CADaemon *ca, cJSON *req, char **resp)
     cJSON *jcsr = cJSON_GetObjectItem(req, "csr_pem");
     cJSON *jvd  = cJSON_GetObjectItem(req, "valid_days");
     cJSON *jprf = cJSON_GetObjectItem(req, "profile");
+    cJSON *jidentity = cJSON_GetObjectItem(req, "identity");
     if (!cJSON_IsString(jcsr) || !cJSON_IsNumber(jvd) || !cJSON_IsString(jprf)) {
         *resp = build_error_json(ERR_CMD_ISSUE_CERT_MISSING_PARAM, "IssueCert missing parameters");
         return CA_ERR_INTERNAL;
@@ -132,12 +209,13 @@ static CA_STATUS handle_issue_cert_req(CADaemon *ca, cJSON *req, char **resp)
     const char *csr_pem    = jcsr->valuestring;
     unsigned    valid_days = (unsigned)jvd->valueint;
     const char *profile    = jprf->valuestring;
+    const char *identity   = cJSON_IsString(jidentity) ? jidentity->valuestring : NULL;
 
     char *cert_pem = NULL;
     char *serial   = NULL;
     uint32_t cert_pem_length = 0;
     uint32_t serial_length = 0;
-    CA_STATUS status = ca_issue_cert(ca, csr_pem, valid_days, profile,
+    CA_STATUS status = ca_issue_cert_for_identity(ca, identity, csr_pem, valid_days, profile,
                                   &cert_pem, &cert_pem_length, &serial, &serial_length);
     if (status != CA_OK)
     {
@@ -165,14 +243,16 @@ static CA_STATUS handle_revoke_cert_req(CADaemon *ca, cJSON *req, char **resp)
 {
     cJSON *jsn = cJSON_GetObjectItem(req, "serial");
     cJSON *jrs = cJSON_GetObjectItem(req, "reason_code");
+    cJSON *jidentity = cJSON_GetObjectItem(req, "identity");
     if (!cJSON_IsString(jsn) || !cJSON_IsNumber(jrs)) {
         *resp = build_error_json(ERR_CMD_REVOKE_CERT_MISSING_PARAM, "RevokeCert missing parameters");
         return CA_ERR_INTERNAL;
     }
     const char *serial = jsn->valuestring;
     int reason = jrs->valueint;
+    const char *identity = cJSON_IsString(jidentity) ? jidentity->valuestring : NULL;
 
-    CA_STATUS status = ca_revoke_cert(ca, serial, reason);
+    CA_STATUS status = ca_revoke_cert_for_identity(ca, identity, serial, reason);
     if (status != CA_OK)
     {
         *resp = build_error_json(105, "RevokeCert failed");
@@ -193,10 +273,11 @@ static CA_STATUS handle_revoke_cert_req(CADaemon *ca, cJSON *req, char **resp)
  */
 static CA_STATUS handle_get_crl_req(CADaemon *ca, cJSON *req, char **resp)
 {
-    (void)req;
+    cJSON *jidentity = cJSON_GetObjectItem(req, "identity");
+    const char *identity = cJSON_IsString(jidentity) ? jidentity->valuestring : NULL;
     char *crl_pem = NULL;
     uint32_t crl_pem_length = 0;
-    CA_STATUS status = ca_get_crl(ca, &crl_pem, &crl_pem_length);
+    CA_STATUS status = ca_get_crl_for_identity(ca, identity, &crl_pem, &crl_pem_length);
     if (status != CA_OK)
     {
         *resp = build_error_json(ERR_CMD_GET_CRL_FAILED, "GetCRL failed");
@@ -210,4 +291,3 @@ static CA_STATUS handle_get_crl_req(CADaemon *ca, cJSON *req, char **resp)
     cJSON_Delete(root);
     return CA_OK;
 }
-

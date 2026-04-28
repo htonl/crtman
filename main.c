@@ -24,6 +24,12 @@
 // Global CA context
 static CADaemon *g_ca = NULL;
 
+static void trim_line(char *s)
+{
+    if (s == NULL) return;
+    s[strcspn(s, "\r\n")] = '\0';
+}
+
 // Handle each new client connection
 static void handle_client(xpc_connection_t conn) {
     // Set the event handler for messages from this client
@@ -86,12 +92,14 @@ int main(void)
         char db[MAX_LINE_LENGTH];
         if ((fgets(db, MAX_LINE_LENGTH, cfg_file)) != NULL)
         {
+            trim_line(db);
             cfg.db_dir = db;
         }
 
         char label[MAX_LINE_LENGTH];
         if ((fgets(label, MAX_LINE_LENGTH, cfg_file)) != NULL)
         {
+            trim_line(label);
             cfg.ca_label = label;
         }
 
@@ -99,12 +107,14 @@ int main(void)
         char *endptr;
         if ((fgets(validity_str, MAX_LINE_LENGTH, cfg_file)) != NULL)
         {
+            trim_line(validity_str);
             cfg.default_validity = strtoul(validity_str, &endptr, 10);
         }
 
         char provision[MAX_LINE_LENGTH];
         if ((fgets(provision, MAX_LINE_LENGTH, cfg_file)) != NULL)
         {
+            trim_line(provision);
             if (strncmp(provision, "true", 4) == 0)
             {
                 cfg.provision_key = true;

@@ -59,6 +59,22 @@ void ca_shutdown(CADaemon **ca);
  * @param [out] Internally allocated cert pem
  */
 CA_STATUS ca_get_ca_cert(CADaemon *ca, char **pem_out, uint32_t *pem_length);
+CA_STATUS ca_get_ca_cert_for_identity(CADaemon *ca,
+                                      const char *identity,
+                                      char **pem_out,
+                                      uint32_t *pem_length);
+
+CA_STATUS ca_add_signing_identity(CADaemon *ca,
+                                  const char *identity,
+                                  char **ca_cert_pem_out,
+                                  uint32_t *ca_cert_pem_length);
+CA_STATUS ca_add_signing_identity_signed_by(CADaemon *ca,
+                                  const char *identity,
+                                  const char *signed_by,
+                                  char **ca_cert_pem_out,
+                                  uint32_t *ca_cert_pem_length);
+
+CA_STATUS ca_list_signing_identities(CADaemon *ca, char **json_out);
 
 /*
  * @brief Handle CSR request
@@ -80,6 +96,15 @@ CA_STATUS ca_issue_cert(CADaemon *ca,
                    uint32_t    *cert_pem_length,
                    char      **serial_out,
                    uint32_t    *serial_length);
+CA_STATUS ca_issue_cert_for_identity(CADaemon *ca,
+                   const char *identity,
+                   const char *csr_pem,
+                   unsigned    valid_days,
+                   const char *profile,
+                   char      **cert_pem_out,
+                   uint32_t    *cert_pem_length,
+                   char      **serial_out,
+                   uint32_t    *serial_length);
 
 /*
  * @brief Handle revoke request
@@ -91,6 +116,10 @@ CA_STATUS ca_issue_cert(CADaemon *ca,
 CA_STATUS ca_revoke_cert(CADaemon *ca,
                     const char *serial,
                     int          reason_code);
+CA_STATUS ca_revoke_cert_for_identity(CADaemon *ca,
+                    const char *identity,
+                    const char *serial,
+                    int          reason_code);
 
 /*
  * @brief get the CRL for the CA
@@ -100,5 +129,9 @@ CA_STATUS ca_revoke_cert(CADaemon *ca,
  * @param [out] crl_pem_length the length of the CRL
  */
 CA_STATUS ca_get_crl(CADaemon *ca, char **crl_pem_out, uint32_t *crl_pem_length);
+CA_STATUS ca_get_crl_for_identity(CADaemon *ca,
+                                  const char *identity,
+                                  char **crl_pem_out,
+                                  uint32_t *crl_pem_length);
 
 #endif /* _H_CA_SERVER_H_ */
